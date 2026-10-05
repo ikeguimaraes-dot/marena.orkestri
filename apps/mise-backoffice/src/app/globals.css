@@ -1,0 +1,93 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /* Fundos — marfim e superfícies suaves */
+  --color-base: #f6f7f2;
+  --color-surface: #fcfdf9;
+  --color-surface-raised: #f0f3e9;
+  --color-surface-hover: #e2e6db;
+
+  /* Bordas */
+  --color-edge: #e2e6db;
+  --color-edge-strong: #cdd7c1;
+
+  /* Texto */
+  --color-ink: #303d31;
+  --color-ink-muted: #616e56;
+  --color-ink-subtle: #647357;
+  --color-ink-faint: #69765f;
+
+  /* Ação principal — verde profundo */
+  --color-ember: #385b3e;
+  --color-ember-hover: #2b4a31;
+  --color-ember-soft: #e7efde;
+  --color-ember-ink: #ffffff;
+
+  /* Conforme — verde */
+  --color-fresh: #438561;
+  --color-fresh-bright: #2e7751;
+  --color-fresh-soft: #e7f1e4;
+  --color-fresh-ink: #04342C;
+
+  /* Alerta — terracota/vermelho */
+  --color-alert: #c96750;
+  --color-alert-bright: #b3523d;
+  --color-alert-soft: #faece6;
+  --color-alert-ink: #FFFFFF;
+
+  /* Atenção — dourado */
+  --color-warn: #b68b3b;
+  --color-warn-bright: #8c691f;
+  --color-warn-soft: #f7efdc;
+  --color-warn-ink: #412402;
+
+  /* Info — azul (uso pontual) */
+  --color-info: #486f8c;
+  --color-info-soft: #e7eff4;
+  --color-info-ink: #042C53;
+}
+
+:root {
+  --background: #f6f7f2;
+  --foreground: #303d31;
+  --font-geist-sans: 'Geist', sans-serif;
+  --font-geist-mono: 'Geist Mono', monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@media print {
+  nav,
+  header,
+  [data-no-print] {
+    display: none !important;
+  }
+  [data-colapsavel-content] {
+    display: block !important;
+  }
+  body {
+    background: white;
+    color: black;
+  }
+}

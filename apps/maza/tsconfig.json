@@ -1,0 +1,68 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@maza/db": [
+        "../../packages/db/src/index.ts"
+      ],
+      "@maza/db/*": [
+        "../../packages/db/src/*"
+      ],
+      "@maza/ui": [
+        "../../packages/ui/src/index.ts"
+      ],
+      "@maza/ui/*": [
+        "../../packages/ui/src/*"
+      ],
+      "@maza/auth": [
+        "../../packages/auth/src/index.ts"
+      ],
+      "@maza/auth/*": [
+        "../../packages/auth/src/*"
+      ],
+      "@maza/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@maza/core/*": [
+        "../../packages/core/src/*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

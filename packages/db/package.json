@@ -1,0 +1,24 @@
+{
+  "name": "@maza/db",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./supabase/client": "./src/supabase/client.ts",
+    "./supabase/server": "./src/supabase/server.ts",
+    "./supabase/proxy": "./src/supabase/proxy.ts",
+    "./supabase/operations-client": "./src/supabase/operations-client.ts",
+    "./types": "./src/types/index.ts",
+    "./types/database": "./src/types/database.ts",
+    "./types/operations-database": "./src/types/operations-database.ts",
+    "./types/pessoas": "./src/types/pessoas.ts",
+    "./types/compras-ingredientes": "./src/types/compras-ingredientes.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.104.1"
+  },
+  "peerDependencies": {
+    "next": "*"
+  }
+}

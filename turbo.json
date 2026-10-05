@@ -1,0 +1,40 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": [
+        "^lint"
+      ]
+    },
+    "type-check": {
+      "dependsOn": [
+        "^type-check"
+      ],
+      "outputs": []
+    }
+  },
+  "globalEnv": [
+    "NEXT_PUBLIC_*",
+    "SUPABASE_*",
+    "*_APP_URL",
+    "LOCAL_ZONES",
+    "VERCEL_ENV",
+    "DELIVERY_IMPORT_MARKER",
+    "RESTAURANT_IMPORT_MARKER",
+    "ERP_COMPANY_BY_UNIT_JSON"
+  ]
+}

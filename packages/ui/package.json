@@ -1,0 +1,41 @@
+{
+  "name": "@maza/ui",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./utils": "./src/utils.ts",
+    "./avatar": "./src/ui/avatar.tsx",
+    "./badge": "./src/ui/badge.tsx",
+    "./button": "./src/ui/button.tsx",
+    "./card": "./src/ui/card.tsx",
+    "./command": "./src/ui/command.tsx",
+    "./dialog": "./src/ui/dialog.tsx",
+    "./dropdown-menu": "./src/ui/dropdown-menu.tsx",
+    "./input": "./src/ui/input.tsx",
+    "./input-group": "./src/ui/input-group.tsx",
+    "./label": "./src/ui/label.tsx",
+    "./select": "./src/ui/select.tsx",
+    "./sheet": "./src/ui/sheet.tsx",
+    "./sonner": "./src/ui/sonner.tsx",
+    "./table": "./src/ui/table.tsx",
+    "./tabs": "./src/ui/tabs.tsx",
+    "./textarea": "./src/ui/textarea.tsx",
+    "./tooltip": "./src/ui/tooltip.tsx",
+    "./kpi-card": "./src/ui/kpi-card.tsx",
+    "./progress-bar": "./src/ui/progress-bar.tsx"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.11.0",
+    "next-themes": "^0.4.6",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0"
+  },
+  "peerDependencies": {
+    "next": "*",
+    "react": "*",
+    "react-dom": "*"
+  }
+}
