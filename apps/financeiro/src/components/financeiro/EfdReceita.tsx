@@ -40,7 +40,7 @@ export function EfdReceita({ unitId, competencia, allowImport }: { unitId: strin
   }
   return <section aria-label="Receita fiscal EFD" style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 24 }}>
     <h3 style={{ margin: "0 0 8px" }}>Receita fiscal · EFD PIS/COFINS</h3>
-    <p style={{ color: "var(--text-3)", fontSize: 13 }}>Resumo mensal para conferência. Não é somado aos indicadores de caixa ou às notas de saída. O PDF não informa recebimentos, clientes ou turnos.</p>
+    <p style={{ color: "var(--text-3)", fontSize: 13 }}>Resumo fiscal mensal. Quando não há relatório Lorean para a data, o EFD alimenta a Receita diária e a aba Vendas do dia. O PDF não informa recebimentos, clientes, turnos ou quantidades; quando houver dados do Lorean, eles terão prioridade para evitar duplicidade.</p>
     {loadError && <p role="alert">{loadError}</p>}
     {!loadError && rows.length === 0 && <p>Nenhum demonstrativo fiscal salvo para {competencia}.</p>}
     {rows.map(row => <p key={row.cnpj}>CNPJ {row.cnpj} · Receita: <strong>{brl(row.receita)}</strong> · PIS: {brl(row.pis)} · COFINS: {brl(row.cofins)}</p>)}
