@@ -12,6 +12,7 @@ import {
 import { useUnit } from "@maza/auth/context";
 import { TopProdutosTable } from "@/components/financeiro/TopProdutosTable";
 import { MetasReceita } from "@/components/financeiro/MetasReceita";
+import { EfdReceita } from "@/components/financeiro/EfdReceita";
 import { metaMensalSemanal } from "@/lib/receita/metas";
 
 // Pelo shell, as APIs passam pelo rewrite /financeiro/api/*. No domínio direto
@@ -480,6 +481,7 @@ export default function ReceitaPage() {
       </nav>
       {aba === "metas" && (unit ? <MetasReceita key={unit.id} unitId={unit.id} unitName={unit.name} apiBase={API_BASE} ano={ano} mes={mes} onSaved={() => { void loadData(); }} realizados={dayGroups.map(g => ({ data: g.date, valor: g.totalReceita }))} overrides={metasOverride} receitaLoading={loading} receitaError={dbError} /> : <p>Selecione uma unidade para definir as metas.</p>)}
       {aba === "receita" && <>
+      {unit && <EfdReceita key={`${unit.id}-${ano}-${mes}`} unitId={unit.id} competencia={`${ano}-${String(mes).padStart(2, "0")}`} allowImport={showImport} />}
 
       {/* Import panel */}
       {showImport && (

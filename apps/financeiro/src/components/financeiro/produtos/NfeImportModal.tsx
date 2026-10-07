@@ -19,19 +19,24 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
   const [error, setError] = useState("")
   const [result, setResult] = useState<NfeImportResult | null>(null)
 
-  async function readZip(file: File) {
-    setStatus("reading"); setError(""); setFileName(file.name)
+  async function readFiles(files: File[]) {
+    setStatus("reading"); setError(""); setNotes([]); setFileName(files.map(file => file.name).join(", "))
     try {
-      const zip = await JSZip.loadAsync(await file.arrayBuffer())
-      const xmlFiles = Object.values(zip.files).filter(entry => !entry.dir && entry.name.toLowerCase().endsWith(".xml"))
-      if (!xmlFiles.length) throw new Error("O ZIP não contém arquivos XML.")
       const parsed: ParsedNfe[] = []
       let invalid = 0
-      for (const entry of xmlFiles) {
-        try { parsed.push(parseNfeXml(await entry.async("string"), entry.name)) }
-        catch { invalid++ }
+      for (const file of files) {
+        if (file.name.toLowerCase().endsWith(".xml")) {
+          try { parsed.push(parseNfeXml(await file.text(), file.name)) } catch { invalid++ }
+        } else if (file.name.toLowerCase().endsWith(".zip")) {
+          const zip = await JSZip.loadAsync(await file.arrayBuffer())
+          const xmlFiles = Object.values(zip.files).filter(entry => !entry.dir && entry.name.toLowerCase().endsWith(".xml"))
+          if (!xmlFiles.length) throw new Error("O ZIP não contém arquivos XML.")
+          for (const entry of xmlFiles) {
+            try { parsed.push(parseNfeXml(await entry.async("string"), entry.name)) } catch { invalid++ }
+          }
+        } else { invalid++ }
       }
-      if (!parsed.length) throw new Error("Nenhum XML de NF-e válido foi encontrado.")
+      if (!parsed.length) throw new Error("Nenhum XML de NF-e/NFC-e válido foi encontrado.")
       setNotes(parsed.sort((a, b) => Number(!!a.eventoCancelamento) - Number(!!b.eventoCancelamento))); setRejected(invalid); setStatus("ready")
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e)); setStatus("error")
@@ -85,18 +90,19 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
   return createPortal(<div style={{ position:"fixed", inset:0, zIndex:1000, background:"rgba(0,0,0,.62)", display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e => { if (e.target === e.currentTarget && !busy) onClose() }}>
     <div style={box}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-        <div><h2 style={{ margin:0, fontSize:18 }}>Importar NF-e</h2><p style={{ margin:"4px 0 0", fontSize:12, color:"var(--text-3)" }}>Pacote ZIP com XMLs de entrada ou saída</p></div>
+        <div><h2 style={{ margin:0, fontSize:18 }}>Importar NF-e / NFC-e</h2><p style={{ margin:"4px 0 0", fontSize:12, color:"var(--text-3)" }}>XMLs avulsos ou pacotes ZIP de entrada ou saída</p></div>
         {!busy && <button onClick={onClose} aria-label="Fechar" style={{ background:"none", border:0, color:"var(--text-3)", cursor:"pointer", fontSize:20 }}>×</button>}
       </div>
 
       {(status === "idle" || status === "error") && notes.length === 0 && <label style={{ display:"grid", placeItems:"center", gap:8, padding:28, border:"2px dashed var(--border)", borderRadius:10, cursor:"pointer" }}>
-        <span style={{ fontSize:30 }}>📦</span><span style={{ fontSize:13, color:"var(--text-2)" }}>{fileName || "Selecionar pacote .zip"}</span>
-        <input ref={inputRef} type="file" accept=".zip,application/zip" hidden onChange={e => { const file=e.target.files?.[0]; if(file) void readZip(file) }} />
+        <span style={{ fontSize:30 }}>📦</span><span style={{ fontSize:13, color:"var(--text-2)" }}>{fileName || "Selecionar XMLs ou ZIP"}</span>
+        <input ref={inputRef} type="file" multiple accept=".zip,.xml,application/zip,application/xml,text/xml" hidden onChange={e => { const files=Array.from(e.target.files??[]); if(files.length) void readFiles(files) }} />
       </label>}
 
       {status === "reading" && <p style={{ padding:30, textAlign:"center", color:"var(--text-3)" }}>Lendo e validando os XMLs…</p>}
 
       {(status === "ready" || status === "error") && notes.length > 0 && <>
+        {rejected > 0 && <p role="alert">{rejected} arquivo(s) inválido(s) serão ignorados. Confira o pacote antes de confirmar.</p>}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
           {[["XMLs", notes.length], ["Válidas", active.length], ["Canceladas", notes.length-active.length], ["Total", total.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})]].map(([label,value]) => <div key={String(label)} style={{ padding:10, background:"var(--surface-2)", borderRadius:8 }}><div style={{ fontSize:9, color:"var(--text-3)", textTransform:"uppercase", fontWeight:700 }}>{label}</div><div style={{ fontSize:14, fontWeight:700, marginTop:3 }}>{value}</div></div>)}
         </div>
