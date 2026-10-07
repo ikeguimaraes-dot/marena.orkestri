@@ -417,6 +417,16 @@ export default function ReceitaPage() {
     // mostra os 60 itens mais vendidos, não apenas reordena o Top 60 por valor.
     return Array.from(map.values());
   }, [produtosDia]);
+  const top60Dia = useMemo(() => {
+    const map = new Map<string, { produto: string; grupo: string; qtd: number; total: number }>();
+    for (const p of dayProdutos) {
+      const key = `${p.grupo}::${p.produto}`;
+      const ex = map.get(key);
+      if (ex) { ex.qtd += p.qtd ?? 0; ex.total += p.total ?? 0; }
+      else map.set(key, { produto: p.produto, grupo: p.grupo, qtd: p.qtd ?? 0, total: p.total ?? 0 });
+    }
+    return Array.from(map.values());
+  }, [dayProdutos]);
   const dayDescontosDetlh      = descontosDetalhe.filter((d) => selOrigIds.has(d.workday_id_fk));
   const dayCancelamentos       = cancelamentos.filter((c) => selOrigIds.has(c.workday_id_fk));
   const dayCancelamentosDetlh  = cancelamentosDetalhe.filter((c) => selOrigIds.has(c.workday_id_fk));
@@ -862,12 +872,12 @@ export default function ReceitaPage() {
             </div>
           )}
 
-          {/* Top 60 produtos do mês */}
+          {/* Ranking de produtos por período e critério */}
           <div style={{ marginBottom: 28 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: "0 0 12px" }}>
-              Top 60 produtos · {mesLabel}
+              Ranking de produtos vendidos · {mesLabel}
             </p>
-            <TopProdutosTable produtos={top60Mes} />
+            <TopProdutosTable produtosMes={top60Mes} produtosDia={top60Dia} dataSelecionada={selectedDate} />
           </div>
         </>
       )}

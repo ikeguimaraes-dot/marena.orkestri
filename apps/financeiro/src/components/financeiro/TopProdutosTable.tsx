@@ -5,20 +5,28 @@ import type { TopProdutoItem } from "@/app/financeiro/actions"
 import { formatBRL } from "@/lib/financeiro/utils"
 
 type SortKey = "total" | "qtd"
-type View = "todos" | "categoria"
+type Period = "mes" | "dia"
 
-type Props = { produtos: TopProdutoItem[] }
+type Props = { produtosMes: TopProdutoItem[]; produtosDia: TopProdutoItem[]; dataSelecionada: string | null }
 
-export function TopProdutosTable({ produtos }: Props) {
-  const [view, setView] = useState<View>("todos")
+export function TopProdutosTable({ produtosMes, produtosDia, dataSelecionada }: Props) {
+  const [period, setPeriod] = useState<Period>("mes")
   const [sort, setSort] = useState<SortKey>("total")
+  const [query, setQuery] = useState("")
+  const produtos = period === "mes" ? produtosMes : produtosDia
+  const dateLabel = dataSelecionada
+    ? new Date(`${dataSelecionada}T12:00:00`).toLocaleDateString("pt-BR")
+    : "dia selecionado"
 
   const sorted = useMemo(
-    () => [...produtos].sort((a, b) => b[sort] - a[sort]).slice(0, 60),
-    [produtos, sort],
+    () => [...produtos]
+      .filter((p) => p.produto.toLocaleLowerCase("pt-BR").includes(query.trim().toLocaleLowerCase("pt-BR")))
+      .sort((a, b) => b[sort] - a[sort])
+      .slice(0, 60),
+    [produtos, query, sort],
   )
 
-  if (!produtos.length) {
+  if (!produtosMes.length) {
     return (
       <div
         style={{
@@ -40,25 +48,25 @@ export function TopProdutosTable({ produtos }: Props) {
     <div>
       {/* Controles */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        {/* View toggle */}
+        {/* Período */}
         <div style={{ display: "flex", gap: 6 }}>
-          {(["todos", "categoria"] as const).map((v) => (
+          {(["mes", "dia"] as const).map((value) => (
             <button
-              key={v}
-              onClick={() => setView(v)}
+              key={value}
+              onClick={() => setPeriod(value)}
               style={{
                 padding: "5px 14px",
                 borderRadius: 8,
                 border: "1px solid var(--border)",
-                background: view === v ? "var(--brand)" : "var(--surface)",
-                color: view === v ? "#fff" : "var(--text-2)",
+                background: period === value ? "var(--brand)" : "var(--surface)",
+                color: period === value ? "#fff" : "var(--text-2)",
                 fontSize: 12,
                 fontWeight: 600,
                 cursor: "pointer",
                 letterSpacing: 0.3,
               }}
             >
-              {v === "todos" ? "Todos" : "Por categoria"}
+              {value === "mes" ? "Mês inteiro" : `Dia ${dateLabel}`}
             </button>
           ))}
         </div>
@@ -93,10 +101,18 @@ export function TopProdutosTable({ produtos }: Props) {
         </div>
       </div>
 
-      {view === "todos" ? (
-        <FlatTable produtos={sorted} sort={sort} />
-      ) : (
-        <CategoriaView produtos={sorted} sort={sort} />
+      <input
+        aria-label="Buscar produto no ranking"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Buscar produto vendido…"
+        style={{ width: "100%", boxSizing: "border-box", marginBottom: 12, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 12 }}
+      />
+      <p style={{ margin: "0 0 10px", fontSize: 11, color: "var(--text-3)" }}>
+        Top {sorted.length} por {sort === "total" ? "faturamento" : "quantidade vendida"} · {period === "mes" ? "mês inteiro" : dateLabel}
+      </p>
+      {sorted.length ? <FlatTable produtos={sorted} sort={sort} /> : (
+        <div style={{ padding: 24, textAlign: "center", color: "var(--text-3)", border: "1px dashed var(--border)", borderRadius: 12 }}>Nenhum produto encontrado neste período.</div>
       )}
     </div>
   )
@@ -115,7 +131,7 @@ function FlatTable({ produtos, sort }: { produtos: TopProdutoItem[]; sort: SortK
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "32px 1fr 100px 80px 90px",
+          gridTemplateColumns: "32px 1fr 80px 110px",
           gap: 12,
           padding: "8px 16px",
           borderBottom: "1px solid var(--border)",
@@ -128,16 +144,15 @@ function FlatTable({ produtos, sort }: { produtos: TopProdutoItem[]; sort: SortK
       >
         <span>#</span>
         <span>Produto</span>
-        <span>Categoria</span>
         <span style={{ textAlign: "right", color: sort === "qtd" ? "var(--brand)" : undefined }}>Qtd</span>
-        <span style={{ textAlign: "right", color: sort === "total" ? "var(--brand)" : undefined }}>Total</span>
+        <span style={{ textAlign: "right", color: sort === "total" ? "var(--brand)" : undefined }}>Faturamento</span>
       </div>
       {produtos.map((p, i) => (
         <div
           key={`${p.grupo}::${p.produto}`}
           style={{
             display: "grid",
-            gridTemplateColumns: "32px 1fr 100px 80px 90px",
+            gridTemplateColumns: "32px 1fr 80px 110px",
             gap: 12,
             padding: "10px 16px",
             borderTop: i === 0 ? "none" : "1px solid var(--border)",
@@ -161,17 +176,6 @@ function FlatTable({ produtos, sort }: { produtos: TopProdutoItem[]; sort: SortK
           </span>
           <span
             style={{
-              fontSize: 11,
-              color: "var(--text-3)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {p.grupo}
-          </span>
-          <span
-            style={{
               fontSize: 12,
               fontWeight: sort === "qtd" ? 700 : 400,
               color: sort === "qtd" ? "var(--text)" : "var(--text-2)",
@@ -190,102 +194,6 @@ function FlatTable({ produtos, sort }: { produtos: TopProdutoItem[]; sort: SortK
           >
             {formatBRL(p.total)}
           </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function CategoriaView({ produtos, sort }: { produtos: TopProdutoItem[]; sort: SortKey }) {
-  const groupMap = new Map<string, { items: TopProdutoItem[]; total: number; qtd: number }>()
-  for (const p of produtos) {
-    const g = p.grupo || "Sem categoria"
-    const ex = groupMap.get(g)
-    if (ex) {
-      ex.items.push(p)
-      ex.total += p.total
-      ex.qtd += p.qtd
-    } else {
-      groupMap.set(g, { items: [p], total: p.total, qtd: p.qtd })
-    }
-  }
-
-  const groups = Array.from(groupMap.entries()).sort(
-    (a, b) => b[1][sort] - a[1][sort],
-  )
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {groups.map(([grupo, { items, total, qtd }]) => (
-        <div
-          key={grupo}
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: 12,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "10px 16px",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", letterSpacing: 0.3 }}>
-              {grupo}
-            </span>
-            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-              <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-                {fmtQtd(qtd)} un
-              </span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--brand)" }}>
-                {formatBRL(total)}
-              </span>
-            </div>
-          </div>
-
-          {items.map((p, i) => (
-            <div
-              key={p.produto}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 80px 90px",
-                gap: 12,
-                padding: "9px 16px",
-                borderTop: i === 0 ? "none" : "1px solid var(--border)",
-                alignItems: "center",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 12,
-                  color: "var(--text)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {p.produto}
-              </span>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: sort === "qtd" ? 700 : 400,
-                  color: sort === "qtd" ? "var(--text)" : "var(--text-3)",
-                  textAlign: "right",
-                }}
-              >
-                {fmtQtd(p.qtd)} un
-              </span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", textAlign: "right" }}>
-                {formatBRL(p.total)}
-              </span>
-            </div>
-          ))}
         </div>
       ))}
     </div>
