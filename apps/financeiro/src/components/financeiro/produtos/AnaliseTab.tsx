@@ -38,10 +38,23 @@ const unidSuffix = (u: string | null) => (u ? `/${u.toLowerCase()}` : "")
 // ── Types ────────────────────────────────────────────────────────────────────
 type SortMode = "variacao" | "nome" | "codigo" | "compras" | "preco"
 
-type Props = { unitId: string | null; onSelecionarNota?: (chaveNfe: string) => void }
+type Props = { unitId: string | null; mes: number; ano: number; onSelecionarNota?: (chaveNfe: string) => void }
+
+const competenciaFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit",
+})
+
+function pertenceACompetencia(data: string | null, mes: number, ano: number) {
+  if (!data) return false
+  const date = new Date(data)
+  if (Number.isNaN(date.getTime())) return false
+  const parts = competenciaFormatter.formatToParts(date)
+  return Number(parts.find(p => p.type === "month")?.value) === mes
+    && Number(parts.find(p => p.type === "year")?.value) === ano
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
-export function AnaliseTab({ unitId, onSelecionarNota }: Props) {
+export function AnaliseTab({ unitId, mes, ano, onSelecionarNota }: Props) {
   const [busca, setBusca]       = useState("")
   const [sortMode, setSort]     = useState<SortMode>("variacao")
   const [selId, setSelId]       = useState<string | null>(null)
@@ -58,10 +71,22 @@ export function AnaliseTab({ unitId, onSelecionarNota }: Props) {
   const lista = useMemo(() => produtos ?? [], [produtos])
 
   // ── KPIs e blocos de destaque (independem de busca/ordenação/seleção) ──────
-  const maioresAltas = useMemo(() =>
-    lista.filter(p => p.ultimaVarPct != null && p.ultimaVarPct > 0)
-      .sort((a, b) => (b.ultimaVarPct ?? 0) - (a.ultimaVarPct ?? 0)).slice(0, 10)
-  , [lista])
+  const maioresAltas = useMemo(() => lista
+    .map(produto => {
+      const maiorCompra = produto.compras
+        .filter(compra => pertenceACompetencia(compra.data, mes, ano) && compra.varPct != null && compra.varPct > 0)
+        .sort((a, b) => (b.varPct ?? 0) - (a.varPct ?? 0))[0]
+      return maiorCompra ? {
+        ...produto,
+        precoAtual: maiorCompra.custoUnitario,
+        ultimaVarPct: maiorCompra.varPct,
+        ultimaVarAbs: maiorCompra.varAbs,
+      } : null
+    })
+    .filter((produto): produto is ProdutoEvolucao => produto != null)
+    .sort((a, b) => (b.ultimaVarPct ?? 0) - (a.ultimaVarPct ?? 0))
+    .slice(0, 10)
+  , [lista, mes, ano])
 
   const maioresQuedas = useMemo(() =>
     lista.filter(p => p.ultimaVarPct != null && p.ultimaVarPct < 0)
@@ -137,7 +162,7 @@ export function AnaliseTab({ unitId, onSelecionarNota }: Props) {
     <div style={{ display: "grid", gap: 20 }}>
       {/* ── Topo: maiores altas, maiores quedas, KPIs ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%, 300px),1fr))", gap: 12 }}>
-        <TopoCard title="Maiores altas" icon="▲" cor="#EF4444"
+        <TopoCard title="Maiores altas do mês" icon="▲" cor="#EF4444"
           itens={maioresAltas} selId={selId} onSelect={setSelId} vazio="Nenhum produto subiu de preço na última compra." />
         <TopoCard title="Maiores quedas" icon="▼" cor="#22C55E"
           itens={maioresQuedas} selId={selId} onSelect={setSelId} vazio="Nenhum produto caiu de preço na última compra." />

@@ -814,7 +814,7 @@ export function ProdutosClient({ rows, rowsPlanilha, prevRows, mes, ano, meses, 
 
       {/* ── Análise tab (variação de preço por compra, histórico completo) ── */}
       {hasData && tab === "analise" && (
-        <AnaliseTab unitId={unitId} onSelecionarNota={irParaNota} />
+        <AnaliseTab unitId={unitId} mes={mes} ano={ano} onSelecionarNota={irParaNota} />
       )}
 
       {/* ── CMV tab ── */}
