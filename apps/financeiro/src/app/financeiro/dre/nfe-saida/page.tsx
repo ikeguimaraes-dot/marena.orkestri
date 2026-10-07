@@ -3,13 +3,23 @@ import { getCurrentUnit } from '@maza/auth/unit'
 import { fetchAllPaginado as fetchAll } from '@/lib/financeiro/razao/gerar'
 import { NfeSaidaClient, type DocumentoSaida } from '@/components/financeiro/produtos/NfeSaidaClient'
 export const dynamic='force-dynamic'
+const SAO_PAULO_OFFSET = '-03:00'
+const mesSaoPaulo = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' })
+
+function competenciaSaoPaulo(emissao:string) {
+ const parts=mesSaoPaulo.formatToParts(new Date(emissao))
+ const year=parts.find(part=>part.type==='year')?.value
+ const month=parts.find(part=>part.type==='month')?.value
+ return year&&month?`${year}-${month}`:emissao.slice(0,7)
+}
+
 export default async function NfeSaidaPage({searchParams}:{searchParams:Promise<{mes?:string;ano?:string;pagina?:string;q?:string}>}) {
  const [sp,unit,db]=await Promise.all([searchParams,getCurrentUnit(),createFinanceiroClient()])
  if(!unit) return <p>Selecione uma unidade.</p>
  const base=()=>db.from('nfe_documentos').select('emissao').eq('unit_id',unit.id).eq('direcao','saida').eq('cancelada',false)
  // Histórico leve de datas, sem buscar nenhum item ou XML para montar o filtro.
  const datas=await fetchAll<{emissao:string}>((from,to)=>base().order('id').range(from,to))
- const meses=[...new Set(datas.map(d=>d.emissao.slice(0,7)))].sort()
+ const meses=[...new Set(datas.map(d=>competenciaSaoPaulo(d.emissao)))].sort()
  const ultimo=meses.at(-1)??new Date().toISOString().slice(0,7)
  const escolhido=sp.ano&&sp.mes?`${Number(sp.ano)}-${String(Number(sp.mes)).padStart(2,'0')}`:ultimo
  const periodo=/^20\d{2}-(0[1-9]|1[0-2])$/.test(escolhido)?escolhido:ultimo
@@ -17,7 +27,8 @@ export default async function NfeSaidaPage({searchParams}:{searchParams:Promise<
  if(!meses.includes(periodo))meses.push(periodo)
  const q=(sp.q??'').trim().slice(0,100); const termo=q.replace(/[^\p{L}\p{N} ]/gu,' ').trim()
  function consulta<T extends string>(campos:T) {
-  let query=db.from('nfe_documentos').select(campos).eq('unit_id',unit!.id).eq('direcao','saida').eq('cancelada',false).gte('emissao',`${periodo}-01T00:00:00Z`).lt('emissao',new Date(Date.UTC(ano,mes,1)).toISOString())
+  const proximoPeriodo=`${mes===12?ano+1:ano}-${String(mes===12?1:mes+1).padStart(2,'0')}`
+  let query=db.from('nfe_documentos').select(campos).eq('unit_id',unit!.id).eq('direcao','saida').eq('cancelada',false).gte('emissao',`${periodo}-01T00:00:00${SAO_PAULO_OFFSET}`).lt('emissao',`${proximoPeriodo}-01T00:00:00${SAO_PAULO_OFFSET}`)
   if(termo)query=query.or(`numero.ilike.%${termo}%,emitente_nome.ilike.%${termo}%,destinatario_nome.ilike.%${termo}%`)
   return query
  }
