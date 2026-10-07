@@ -6,6 +6,20 @@ export type EfdResumo = {
   cofins: number;
 };
 
+export type EfdProdutoDia = {
+  codigo: string;
+  produto: string;
+  bruto: number;
+  documentos: number;
+};
+
+export type EfdVendaDia = {
+  data: string;
+  bruto: number;
+  gorjeta: number;
+  produtos: EfdProdutoDia[];
+};
+
 const money = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
 
 /** Extract only explicit summary labels. PIS and COFINS repeat the same sales. */
@@ -41,4 +55,56 @@ export function efdPageText(items: EfdTextItem[]): string {
     row.items.push(item);
   }
   return rows.sort((a, b) => b.y - a.y).map(row => row.items.sort((a, b) => a.transform[4]! - b.transform[4]!).map(item => item.str).join(" ")).join("\n");
+}
+
+const rowPattern = /^\s*\d+\s+(\d{2}\/\d{2}\/\d{4})\s+NFC-e\s+(\d+)\s+\d-\d{3}\s+(\d+)\s+-\s+(.+)$/i;
+const valuePattern = /(?:^|\s)((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})(?=\s|$)/g;
+
+/** Extracts the PIS half only. The COFINS half repeats every fiscal sale. */
+export function parseEfdVendaRows(pageTexts: string[]): EfdVendaDia[] {
+  const byDay = new Map<string, { bruto: number; gorjeta: number; produtos: Map<string, EfdProdutoDia> }>();
+  let inPis = false;
+  let parsedRows = 0;
+  for (const pageText of pageTexts) {
+    const normalized = pageText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (/DEMONSTRATIVO DAS RECEITAS CUMULATIVAS DO COFINS/i.test(normalized)) break;
+    if (/DEMONSTRATIVO DAS RECEITAS CUMULATIVAS DO PIS\/PASEP/i.test(normalized)) inPis = true;
+    if (!inPis) continue;
+    for (const line of normalized.split("\n")) {
+      const row = rowPattern.exec(line);
+      if (!row) continue;
+      const rest = row[4]!;
+      const values = [...rest.matchAll(valuePattern)];
+      const first = values[0];
+      const accountingValue = values[1];
+      if (!first || first.index == null || !accountingValue) continue;
+      const rawProduct = rest.slice(0, first.index).trim().replace(/\s+\d{2}\s*$/, "").trim();
+      if (!rawProduct) continue;
+      const [dd, mm, yyyy] = row[1]!.split("/");
+      const data = `${yyyy}-${mm}-${dd}`;
+      const codigo = row[3]!;
+      // Valor Contábil reconciles to "Total das Receitas"; Valor Produto may
+      // include amounts excluded from the fiscal revenue summary.
+      const bruto = money(accountingValue[1]!);
+      const isService = codigo === "9990000000" || /TAXA DE SERVICO/i.test(rawProduct);
+      const day = byDay.get(data) ?? { bruto: 0, gorjeta: 0, produtos: new Map() };
+      day.bruto += bruto;
+      if (isService) day.gorjeta += bruto;
+      const key = `${codigo}|${rawProduct}`;
+      const product = day.produtos.get(key) ?? { codigo, produto: rawProduct, bruto: 0, documentos: 0 };
+      product.bruto += bruto;
+      product.documentos += 1;
+      day.produtos.set(key, product);
+      byDay.set(data, day);
+      parsedRows += 1;
+    }
+  }
+  if (!inPis || parsedRows === 0) throw new Error("Não foi possível localizar as vendas NFC-e na seção PIS do demonstrativo.");
+  const round = (value: number) => Math.round(value * 100) / 100;
+  return [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([data, day]) => ({
+    data,
+    bruto: round(day.bruto),
+    gorjeta: round(day.gorjeta),
+    produtos: [...day.produtos.values()].sort((a, b) => b.bruto - a.bruto).map(p => ({ ...p, bruto: round(p.bruto) })),
+  }));
 }

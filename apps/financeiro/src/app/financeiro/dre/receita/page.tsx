@@ -170,7 +170,7 @@ function useCountUp(target: number, duration = 600): number {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ReceitaPage() {
   const { unit } = useUnit();
-  const [aba, setAba] = useState<"receita" | "metas">("receita");
+  const [aba, setAba] = useState<"receita" | "vendas" | "metas">("receita");
   const today = new Date();
   const [mes, setMes] = useState(today.getMonth() + 1);
   const [ano, setAno] = useState(today.getFullYear());
@@ -477,9 +477,22 @@ export default function ReceitaPage() {
       </header>
 
       <nav aria-label="Abas de Receita" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-        {(["receita", "metas"] as const).map(tab => <button key={tab} type="button" aria-pressed={aba === tab} onClick={() => setAba(tab)} style={{ padding: "10px 20px", borderRadius: 8, border: `1px solid ${C.border}`, background: aba === tab ? C.brand : C.surface, color: aba === tab ? "#fff" : C.text, cursor: "pointer" }}>{tab === "metas" ? "Metas" : "Receita"}</button>)}
+        {(["receita", "vendas", "metas"] as const).map(tab => <button key={tab} type="button" aria-pressed={aba === tab} onClick={() => setAba(tab)} style={{ padding: "10px 20px", borderRadius: 8, border: `1px solid ${C.border}`, background: aba === tab ? C.brand : C.surface, color: aba === tab ? "#fff" : C.text, cursor: "pointer" }}>{tab === "metas" ? "Metas" : tab === "vendas" ? "Vendas do dia" : "Receita"}</button>)}
       </nav>
       {aba === "metas" && (unit ? <MetasReceita key={unit.id} unitId={unit.id} unitName={unit.name} apiBase={API_BASE} ano={ano} mes={mes} onSaved={() => { void loadData(); }} realizados={dayGroups.map(g => ({ data: g.date, valor: g.totalReceita }))} overrides={metasOverride} receitaLoading={loading} receitaError={dbError} /> : <p>Selecione uma unidade para definir as metas.</p>)}
+      {aba === "vendas" && (
+        <section aria-label="Vendas do dia">
+          {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: C.text3 }}>Carregando…</div> : availableDates.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: C.text3 }}>Nenhuma venda encontrada para {mesLabel}.</div> : <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+              <div><strong style={{ color: C.text }}>Tudo que vendeu no dia</strong><div style={{ color: C.text3, fontSize: 12, marginTop: 3 }}>Dados fiscais do EFD ou detalhes operacionais do Lorean, quando disponíveis.</div></div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {availableDates.map(date => { const dt = new Date(date + "T12:00:00"); return <button key={date} onClick={() => setSelectedDate(date)} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 12, background: selectedDate === date ? C.brand : C.surface3, color: selectedDate === date ? "#fff" : C.text2, border: `1px solid ${selectedDate === date ? C.brand : C.border}`, cursor: "pointer" }}>{date.slice(8)}/{date.slice(5, 7)} {DIAS_PT[dt.getDay()]}</button>; })}
+              </div>
+            </div>
+            <ProdutosVendidosCard produtos={dayProdutos} />
+          </>}
+        </section>
+      )}
       {aba === "receita" && <>
       {unit && <EfdReceita key={`${unit.id}-${ano}-${mes}`} unitId={unit.id} competencia={`${ano}-${String(mes).padStart(2, "0")}`} allowImport={showImport} />}
 
@@ -1485,6 +1498,7 @@ function ProdutosVendidosCard({ produtos }: { produtos: ProdutoDia[] }) {
   const [barsVisible,  setBarsVisible]  = useState(false);
   const injectedRef = useRef(false);
   const prevFKey    = useRef("");
+  const quantidadeDisponivel = produtos.some(p => p.qtd != null);
 
   useEffect(() => {
     if (injectedRef.current || typeof document === "undefined") return;
@@ -1617,7 +1631,7 @@ function ProdutosVendidosCard({ produtos }: { produtos: ProdutoDia[] }) {
       <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
         {[
           `${filtered.length} produto${filtered.length !== 1 ? "s" : ""}`,
-          `${Math.round(animUnidades)} unid.`,
+          quantidadeDisponivel ? `${Math.round(animUnidades)} unid.` : "Quantidade não informada no EFD",
           fmt(animTotal),
         ].map((t, i) => (
           <span key={i} style={{ padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: C.surface3, color: C.text2, border: `1px solid ${C.border}` }}>{t}</span>
@@ -1671,7 +1685,7 @@ function ProdutosVendidosCard({ produtos }: { produtos: ProdutoDia[] }) {
                     <td style={{ padding: "8px 10px" }}>
                       <span title={r.grupo} style={{ display: "inline-block", padding: "2px 7px", borderRadius: 4, fontSize: 10, background: C.surface3, color: C.text3, maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.grupo}</span>
                     </td>
-                    <td style={{ padding: "8px 10px", textAlign: "right", color: C.text3 }}>{r.qtd}</td>
+                    <td style={{ padding: "8px 10px", textAlign: "right", color: C.text3 }}>{quantidadeDisponivel ? r.qtd : "—"}</td>
                     <td style={{ padding: "8px 10px", textAlign: "right" }}>
                       <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700, background: cmvBg, color: cmvClr }}>
                         {cmvVal != null ? pct(cmvVal) : "—"}
@@ -1693,7 +1707,7 @@ function ProdutosVendidosCard({ produtos }: { produtos: ProdutoDia[] }) {
                 <td colSpan={2} style={{ padding: "8px 10px", color: C.text, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 }}>
                   TOTAL {filtered.length < all.length ? `(${filtered.length}/${all.length})` : `(${all.length})`}
                 </td>
-                <td style={{ padding: "8px 10px", textAlign: "right", color: C.text }}>{totQtd}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", color: C.text }}>{quantidadeDisponivel ? totQtd : "—"}</td>
                 <td style={{ padding: "8px 10px", textAlign: "right", color: C.text3 }}>—</td>
                 <td style={{ padding: "8px 10px", textAlign: "right", color: C.text }}>{fmt(totBruto)}</td>
                 <td style={{ padding: "8px 10px", textAlign: "right", color: C.text }}>{fmt(totTotal)}</td>

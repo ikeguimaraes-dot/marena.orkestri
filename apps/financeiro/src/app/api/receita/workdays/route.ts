@@ -59,9 +59,49 @@ export async function GET(request: Request) {
 
   if (wErr) return Response.json({ error: wErr.message }, { status: 500, headers: CORS });
 
+  const { data: efdRows, error: efdErr } = mes_ano
+    ? await db.from("receita_fiscal_efd").select("vendas_diarias").eq("unit_id", unit_id).eq("competencia", mes_ano)
+    : { data: [], error: null };
+  if (efdErr) return Response.json({ error: efdErr.message }, { status: 500, headers: CORS });
+
+  type EfdDay = { data: string; bruto: number; gorjeta: number; produtos: Array<{ codigo: string; produto: string; bruto: number; documentos: number }> };
+  const operationalDates = new Set((workdays ?? []).map(w => w.data));
+  const efdDays = (efdRows ?? []).flatMap(row => Array.isArray(row.vendas_diarias) ? row.vendas_diarias as EfdDay[] : [])
+    .filter(day => !operationalDates.has(day.data));
+  const efdWorkdays = efdDays.map(day => ({
+    id: `efd:${unit_id}:${day.data}`,
+    data: day.data,
+    turno: "dia_inteiro",
+    receita_bruta: day.bruto,
+    receita_bruta_real: day.bruto,
+    desconto: 0,
+    gorjeta: day.gorjeta,
+    receita_liquida: day.bruto,
+    custo: null,
+    cmv_pct: null,
+    clientes: null,
+    ticket_medio: null,
+    previsto: day.bruto,
+    devedor: null,
+    recebido_real: null,
+    devedor_real: null,
+    origem: "efd",
+  }));
+  const efdProducts = efdDays.flatMap(day => day.produtos.map(product => ({
+    workday_id_fk: `efd:${unit_id}:${day.data}`,
+    grupo: product.codigo === "9990000000" ? "Serviço" : "Fiscal EFD",
+    produto: product.produto,
+    qtd: null,
+    cmv_pct: null,
+    bruto: product.bruto,
+    desconto: 0,
+    gorjeta: product.codigo === "9990000000" ? product.bruto : 0,
+    total: product.bruto,
+  })));
+
   const ids: string[] = (workdays ?? []).map((w) => w.id);
 
-  if (ids.length === 0) {
+  if (ids.length === 0 && efdWorkdays.length === 0) {
     const { data: latestWorkday } = await db
       .from("receita_dias")
       .select("data")
@@ -71,25 +111,26 @@ export async function GET(request: Request) {
       .maybeSingle();
     return Response.json({ workdays: [], pagamentos: [], descontos: [], ambientes: [], turnos: [], grupos: [], horarios: [], usuarios: [], caixas: [], produtosDia: [], descontosDetalhe: [], cancelamentos: [], cancelamentosDetalhe: [], meta: null, metasDiaSemana: [], metasOverride: [], latestDataDate: latestWorkday?.data ?? null }, { headers: CORS });
   }
+  const idsForQuery = ids.length ? ids : ["00000000-0000-0000-0000-000000000000"];
 
   const [pagRes, descRes, ambRes, turRes, grpRes, metaRes, metasDsRes, overrideRes, horRes, usuRes, caixasRes, prodRes, descDetRes, cancelRes, cancelDetRes] = await Promise.all([
-    db.from("receita_pagamentos").select("workday_id_fk, forma, valor_fechado, valor_recebido").in("workday_id_fk", ids),
-    db.from("receita_descontos").select("workday_id_fk, motivo, qtd, consumo").in("workday_id_fk", ids),
-    db.from("receita_ambientes").select("workday_id_fk, ambiente, produto, clientes").in("workday_id_fk", ids),
-    db.from("receita_turnos").select("workday_id_fk, turno, produto, clientes, gorjeta, consumo").in("workday_id_fk", ids),
-    db.from("receita_grupos").select("grupo, bruto, pct_bruto").in("workday_id_fk", ids),
+    db.from("receita_pagamentos").select("workday_id_fk, forma, valor_fechado, valor_recebido").in("workday_id_fk", idsForQuery),
+    db.from("receita_descontos").select("workday_id_fk, motivo, qtd, consumo").in("workday_id_fk", idsForQuery),
+    db.from("receita_ambientes").select("workday_id_fk, ambiente, produto, clientes").in("workday_id_fk", idsForQuery),
+    db.from("receita_turnos").select("workday_id_fk, turno, produto, clientes, gorjeta, consumo").in("workday_id_fk", idsForQuery),
+    db.from("receita_grupos").select("grupo, bruto, pct_bruto").in("workday_id_fk", idsForQuery),
     mes_ano
       ? db.from("metas_projecoes").select("meta_faturamento").eq("mes_ano", mes_ano).maybeSingle()
       : Promise.resolve({ data: null }),
     db.from("metas_dia_semana").select("dia_semana, meta").eq("unit_id", unit_id),
     db.from("metas_dia_override").select("data, meta").eq("unit_id", unit_id).gte("data", start).lte("data", end),
-    db.from("receita_horarios").select("workday_id_fk, hora, clientes, gorjeta, produto, consumo").in("workday_id_fk", ids),
-    db.from("receita_usuarios").select("workday_id_fk, usuario, qtd, gorjeta, produto, consumo").in("workday_id_fk", ids),
-    db.from("receita_caixas").select("workday_id_fk, operador, total_fechado, total_recebido, diferenca").in("workday_id_fk", ids),
-    db.from("receita_produtos_dia").select("workday_id_fk, grupo, produto, qtd, cmv_pct, bruto, desconto, gorjeta, total").in("workday_id_fk", ids),
-    db.from("receita_descontos_detalhe").select("workday_id_fk, item, usuario, motivo, qtd, valor").in("workday_id_fk", ids),
-    db.from("receita_cancelamentos").select("workday_id_fk, motivo, qtd, consumo").in("workday_id_fk", ids),
-    db.from("receita_cancelamentos_detalhe").select("workday_id_fk, item, usuario, motivo, qtd, valor").in("workday_id_fk", ids),
+    db.from("receita_horarios").select("workday_id_fk, hora, clientes, gorjeta, produto, consumo").in("workday_id_fk", idsForQuery),
+    db.from("receita_usuarios").select("workday_id_fk, usuario, qtd, gorjeta, produto, consumo").in("workday_id_fk", idsForQuery),
+    db.from("receita_caixas").select("workday_id_fk, operador, total_fechado, total_recebido, diferenca").in("workday_id_fk", idsForQuery),
+    db.from("receita_produtos_dia").select("workday_id_fk, grupo, produto, qtd, cmv_pct, bruto, desconto, gorjeta, total").in("workday_id_fk", idsForQuery),
+    db.from("receita_descontos_detalhe").select("workday_id_fk, item, usuario, motivo, qtd, valor").in("workday_id_fk", idsForQuery),
+    db.from("receita_cancelamentos").select("workday_id_fk, motivo, qtd, consumo").in("workday_id_fk", idsForQuery),
+    db.from("receita_cancelamentos_detalhe").select("workday_id_fk, item, usuario, motivo, qtd, valor").in("workday_id_fk", idsForQuery),
   ]);
 
   // Receita bruta da DRE = receita_dias.receita_bruta = PREVISTO (o que foi
@@ -161,6 +202,7 @@ export async function GET(request: Request) {
       });
     }
   }
+  workdaysFinal.push(...efdWorkdays);
 
   return Response.json({
     workdays:       workdaysFinal,
@@ -172,7 +214,7 @@ export async function GET(request: Request) {
     horarios:       horRes.data      ?? [],
     usuarios:       usuRes.data      ?? [],
     caixas:           caixasRes.data  ?? [],
-    produtosDia:      prodRes.data    ?? [],
+    produtosDia:      [...(prodRes.data ?? []), ...efdProducts],
     descontosDetalhe:     descDetRes.data   ?? [],
     cancelamentos:        cancelRes.data    ?? [],
     cancelamentosDetalhe: cancelDetRes.data ?? [],

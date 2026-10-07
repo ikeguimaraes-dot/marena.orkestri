@@ -2,12 +2,12 @@
 import { useEffect, useState } from "react";
 import { listEfd, saveEfd } from "@/app/financeiro/dre/receita/efd-actions";
 import { readEfdPdf } from "@/lib/receita/efd-browser";
-import type { EfdResumo } from "@/lib/receita/efd";
+import type { EfdResumo, EfdVendaDia } from "@/lib/receita/efd";
 
 const brl = (value: number) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 export function EfdReceita({ unitId, competencia, allowImport }: { unitId: string; competencia: string; allowImport: boolean }) {
   const [rows, setRows] = useState<EfdResumo[]>([]);
-  const [preview, setPreview] = useState<{ text: string; resumo: EfdResumo; filename: string } | null>(null);
+  const [preview, setPreview] = useState<{ text: string; resumo: EfdResumo; vendasDiarias: EfdVendaDia[]; filename: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -29,7 +29,7 @@ export function EfdReceita({ unitId, competencia, allowImport }: { unitId: strin
     if (!preview) return;
     setBusy(true);
     try {
-      const result = await saveEfd({ unitId, text: preview.text, filename: preview.filename });
+      const result = await saveEfd({ unitId, text: preview.text, filename: preview.filename, vendasDiarias: preview.vendasDiarias });
       if (!result.ok) throw new Error(result.error);
       const refreshed = await listEfd(unitId, competencia);
       setRows(refreshed.rows); setLoadError(refreshed.error ?? "");
@@ -49,6 +49,7 @@ export function EfdReceita({ unitId, competencia, allowImport }: { unitId: strin
       {preview && <div>
         <p>{preview.filename} · {preview.resumo.competencia} · CNPJ {preview.resumo.cnpj}</p>
         <p>Receita: <strong>{brl(preview.resumo.receita)}</strong> · PIS: {brl(preview.resumo.pis)} · COFINS: {brl(preview.resumo.cofins)}</p>
+        <p>{preview.vendasDiarias.length} dias com vendas · {preview.vendasDiarias.reduce((sum, d) => sum + d.produtos.length, 0)} produtos/dia identificados.</p>
         <p>Uma nova importação atualiza o resumo deste CNPJ e competência, sem duplicar o total.</p>
         <button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Salvando…" : "Confirmar importação fiscal"}</button>
       </div>}
