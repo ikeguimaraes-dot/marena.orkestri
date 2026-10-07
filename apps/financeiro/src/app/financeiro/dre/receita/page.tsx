@@ -413,7 +413,9 @@ export default function ReceitaPage() {
       if (ex) { ex.qtd += p.qtd ?? 0; ex.total += p.total ?? 0; }
       else map.set(key, { produto: p.produto, grupo: p.grupo, qtd: p.qtd ?? 0, total: p.total ?? 0 });
     }
-    return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 60);
+    // A tabela aplica o limite depois de escolher o critério. Assim, "Quantidade"
+    // mostra os 60 itens mais vendidos, não apenas reordena o Top 60 por valor.
+    return Array.from(map.values());
   }, [produtosDia]);
   const dayDescontosDetlh      = descontosDetalhe.filter((d) => selOrigIds.has(d.workday_id_fk));
   const dayCancelamentos       = cancelamentos.filter((c) => selOrigIds.has(c.workday_id_fk));

@@ -14,7 +14,7 @@ export function TopProdutosTable({ produtos }: Props) {
   const [sort, setSort] = useState<SortKey>("total")
 
   const sorted = useMemo(
-    () => [...produtos].sort((a, b) => b[sort] - a[sort]),
+    () => [...produtos].sort((a, b) => b[sort] - a[sort]).slice(0, 60),
     [produtos, sort],
   )
 

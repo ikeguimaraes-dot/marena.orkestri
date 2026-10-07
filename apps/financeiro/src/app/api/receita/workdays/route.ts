@@ -1,4 +1,5 @@
 import { createFinanceiroClient } from "@/lib/financeiro/db/client";
+import { fetchAllPaginado } from "@/lib/financeiro/razao/gerar";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +69,31 @@ export async function GET(request: Request) {
   const operationalDates = new Set((workdays ?? []).map(w => w.data));
   const efdDays = (efdRows ?? []).flatMap(row => Array.isArray(row.vendas_diarias) ? row.vendas_diarias as EfdDay[] : [])
     .filter(day => !operationalDates.has(day.data));
+  type NfceItem = { dt_emissao: string | null; item_codigo: string | null; item_descricao: string | null; q_embalagem: number | null };
+  const [year, month] = start.slice(0, 7).split("-").map(Number);
+  const nfceItems = efdDays.length && Number.isInteger(year) && Number.isInteger(month)
+    ? await fetchAllPaginado<NfceItem>((from, to) => db
+        .from("produtos_relatorio")
+        .select("dt_emissao,item_codigo,item_descricao,q_embalagem")
+        .eq("unit_id", unit_id)
+        .eq("direcao_nfe", "saida")
+        .eq("ano_lancamento", year)
+        .eq("mes_lancamento", month)
+        .not("chave_nfe", "is", null)
+        .range(from, to))
+    : [];
+  const normalizeProduct = (value: string | null) => (value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+  const quantitiesByProduct = new Map<string, number>();
+  for (const item of nfceItems) {
+    const date = item.dt_emissao?.slice(0, 10);
+    const quantity = Number(item.q_embalagem);
+    if (!date || !Number.isFinite(quantity)) continue;
+    const identities = [item.item_codigo?.trim(), normalizeProduct(item.item_descricao)].filter(Boolean) as string[];
+    for (const identity of identities) {
+      const key = `${date}|${identity}`;
+      quantitiesByProduct.set(key, (quantitiesByProduct.get(key) ?? 0) + quantity);
+    }
+  }
   const efdWorkdays = efdDays.map(day => ({
     id: `efd:${unit_id}:${day.data}`,
     data: day.data,
@@ -91,7 +117,9 @@ export async function GET(request: Request) {
     workday_id_fk: `efd:${unit_id}:${day.data}`,
     grupo: product.codigo === "9990000000" ? "Serviço" : "Fiscal EFD",
     produto: product.produto,
-    qtd: null,
+    qtd: quantitiesByProduct.get(`${day.data}|${product.codigo}`)
+      ?? quantitiesByProduct.get(`${day.data}|${normalizeProduct(product.produto)}`)
+      ?? null,
     cmv_pct: null,
     bruto: product.bruto,
     desconto: 0,
