@@ -109,6 +109,7 @@ export type NfeImportResult = {
   itens: number
   naoImportadas: number
   direcaoIncorreta: number
+  unitIds: string[]
   cnpjsDesconhecidos: NfeCnpjDesconhecido[]
   produtosCriados: number
   vinculosCriados: number
@@ -118,7 +119,7 @@ export type NfeImportResult = {
 type NfeImportNota = NfeImportPayload["notas"][number]
 
 export async function importNfe(payload: NfeImportPayload): Promise<NfeImportResult> {
-  const empty = { ok: false, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, direcaoIncorreta: 0, cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
+  const empty = { ok: false, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, direcaoIncorreta: 0, unitIds: [], cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
   try {
     await requireUser()
     const unit = await getCurrentUnit()
@@ -207,13 +208,13 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
         const destino = payload.direcao === "entrada" ? "NF-e Saída" : "NF-e Entrada"
         return { ...empty, direcaoIncorreta, naoImportadas, error: `Este pacote contém ${direcaoIncorreta} nota${direcaoIncorreta === 1 ? "" : "s"} de ${encontrada}. Importe-o pela página ${destino}.` }
       }
-      return { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas, direcaoIncorreta, cnpjsDesconhecidos, produtosCriados: 0, vinculosCriados: 0 }
+      return { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas, direcaoIncorreta, unitIds: [], cnpjsDesconhecidos, produtosCriados: 0, vinculosCriados: 0 }
     }
 
     const keys = resolvidas.map(note => note.chave)
     const targetUnitIds = [...new Set(resolvidas.map(note => note.unitId))]
     const { data: existing, error: existingError } = await raw
-      .from("nfe_documentos").select("unit_id,chave,cancelada,status_sefaz").in("unit_id", targetUnitIds).in("chave", keys)
+      .from("nfe_documentos").select("unit_id,chave,cancelada,status_sefaz,xml_original").in("unit_id", targetUnitIds).in("chave", keys)
     if (existingError) return { ...empty, error: `Migração 025 pendente: ${existingError.message}`, naoImportadas, cnpjsDesconhecidos }
     const existingKeys = new Set(
       (existing ?? []).map((row: { unit_id: string; chave: string }) => `${row.unit_id} ${row.chave}`)
@@ -223,14 +224,24 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
       note.cancelada = true;
       if (!note.eventoCancelamento) note.statusSefaz = existing.find((r: { unit_id: string; chave: string }) => r.unit_id === note.unitId && r.chave === note.chave)?.status_sefaz ?? note.statusSefaz;
     }
-    const canceladas = resolvidas.filter(note => note.cancelada).length
-    const validas = resolvidas.filter(note => !note.cancelada)
+    const unchangedKeys = new Set((existing ?? []).flatMap((row: { unit_id: string; chave: string; cancelada: boolean; xml_original: string | null }) => {
+      const note = resolvidas.find(candidate => candidate.unitId === row.unit_id && candidate.chave === row.chave)
+      return note && !note.eventoCancelamento && note.xmlOriginal === row.xml_original && note.cancelada === row.cancelada
+        ? [`${row.unit_id} ${row.chave}`]
+        : []
+    }))
+    const paraPersistir = resolvidas.filter(note => !unchangedKeys.has(`${note.unitId} ${note.chave}`))
+    const canceladas = paraPersistir.filter(note => note.cancelada).length
+    const validas = paraPersistir.filter(note => !note.cancelada)
+    if (!paraPersistir.length) {
+      return { ok: true, importadas: 0, duplicadas: existingKeys.size, canceladas: 0, itens: 0, naoImportadas, direcaoIncorreta, unitIds: targetUnitIds, cnpjsDesconhecidos, produtosCriados: 0, vinculosCriados: 0 }
+    }
     const operations: Mutation[] = []
     const importacaoIdPorUnidade = new Map<string, string>()
     for (const uid of targetUnitIds) {
       const id = crypto.randomUUID()
       importacaoIdPorUnidade.set(uid, id)
-      const notas = resolvidas.filter(n => n.unitId === uid)
+      const notas = paraPersistir.filter(n => n.unitId === uid)
       operations.push({ table: "nfe_importacoes", operation: "insert", rows: [{
         id, unit_id: uid, arquivo: payload.arquivo, direcao: payload.direcao,
         total_xml: notas.length, importadas: notas.filter(n => !n.cancelada).length,
@@ -241,7 +252,7 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
     }
     let itemCount = 0
     // A correction replaces the whole note, including removed items and cancellation.
-    for (const note of resolvidas) {
+    for (const note of paraPersistir) {
       if (!/^\d{44}$/.test(note.chave) || !Number.isFinite(note.valorTotal) || !Number.isFinite(Date.parse(note.emissao))) throw new Error("NF-e com chave, data ou valor inválido.")
       operations.push({ table: "nfe_documentos", operation: "upsert", conflict: "unit_id,chave", rows: [{
         unit_id: note.unitId, importacao_id: importacaoIdPorUnidade.get(note.unitId), chave: note.chave, direcao: payload.direcao,
@@ -277,8 +288,8 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
     if (!payload.adiarRecalculo) await finalizarImportacaoNfe(targetUnitIds);
 
     return {
-      ok: true, importadas: validas.length, duplicadas: existingKeys.size, canceladas, itens: itemCount,
-      naoImportadas, direcaoIncorreta, cnpjsDesconhecidos,
+      ok: true, importadas: validas.filter(note => !existingKeys.has(`${note.unitId} ${note.chave}`)).length, duplicadas: existingKeys.size, canceladas, itens: itemCount,
+      naoImportadas, direcaoIncorreta, unitIds: targetUnitIds, cnpjsDesconhecidos,
       produtosCriados: catalogo?.produtosCriados ?? 0,
       vinculosCriados: catalogo?.vinculosCriados ?? 0,
     }

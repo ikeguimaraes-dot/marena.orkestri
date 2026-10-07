@@ -48,8 +48,9 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
     setStatus("uploading"); setError("")
     // Mantém cada Server Action pequena: pacotes de saída podem ter milhares de XMLs.
     try {
-    const aggregate: NfeImportResult = { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, direcaoIncorreta: 0, cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
+    const aggregate: NfeImportResult = { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, direcaoIncorreta: 0, unitIds: [], cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
     const cnpjMap = new Map<string, { nome: string | null; notas: number; valor: number }>()
+    const affectedUnitIds = new Set<string>()
     const batchSize = 75
     for (let i = 0; i < notes.length; i += batchSize) {
       const response = await importNfe({
@@ -68,6 +69,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       aggregate.direcaoIncorreta += response.direcaoIncorreta
       aggregate.produtosCriados += response.produtosCriados
       aggregate.vinculosCriados += response.vinculosCriados
+      for (const unitId of response.unitIds) affectedUnitIds.add(unitId)
       for (const item of response.cnpjsDesconhecidos) {
         const acc = cnpjMap.get(item.cnpj) ?? { nome: item.nome, notas: 0, valor: 0 }
         acc.notas += item.notas
@@ -77,7 +79,9 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       }
     }
     aggregate.cnpjsDesconhecidos = [...cnpjMap.entries()].map(([cnpj, v]) => ({ cnpj, ...v }))
-    await finalizarImportacaoNfe();
+    if (aggregate.importadas > 0 || aggregate.itens > 0 || aggregate.canceladas > 0) {
+      await finalizarImportacaoNfe([...affectedUnitIds]);
+    }
     setResult(aggregate); setStatus("done")
     } catch (e) { setError(`Os lotes já gravados foram preservados. ${e instanceof Error ? e.message : String(e)}`); setStatus("error"); }
   }
@@ -117,7 +121,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       {status === "uploading" && <p style={{ padding:28, textAlign:"center", color:"var(--text-3)" }}>Salvando notas e atualizando o CMV…</p>}
       {status === "done" && result && <div style={{ padding:"12px 0" }}>
         <h3 style={{ color:"#22c55e", margin:"0 0 8px" }}>Importação concluída</h3>
-        <p style={{ fontSize:13, color:"var(--text-2)" }}>{result.importadas} notas importadas · {result.itens} itens · {result.duplicadas} notas atualizadas · {result.canceladas} canceladas{result.naoImportadas > 0 ? ` · ${result.naoImportadas} não importadas` : ""}</p>
+        <p style={{ fontSize:13, color:"var(--text-2)" }}>{result.importadas} notas novas · {result.itens} itens gravados · {result.duplicadas} notas já existentes · {result.canceladas} canceladas{result.naoImportadas > 0 ? ` · ${result.naoImportadas} não importadas` : ""}</p>
         {result.direcaoIncorreta > 0 && <p style={{ fontSize:12, color:"#f59e0b" }}>{result.direcaoIncorreta} nota{result.direcaoIncorreta !== 1 ? "s" : ""} ignorada{result.direcaoIncorreta !== 1 ? "s" : ""} por pertencer{result.direcaoIncorreta === 1 ? "" : "em"} à direção oposta.</p>}
         {(result.produtosCriados > 0 || result.vinculosCriados > 0) && (
           <p style={{ fontSize:12, color:"var(--text-3)", marginTop: 4 }}>
