@@ -108,6 +108,7 @@ export type NfeImportResult = {
   canceladas: number
   itens: number
   naoImportadas: number
+  direcaoIncorreta: number
   cnpjsDesconhecidos: NfeCnpjDesconhecido[]
   produtosCriados: number
   vinculosCriados: number
@@ -117,7 +118,7 @@ export type NfeImportResult = {
 type NfeImportNota = NfeImportPayload["notas"][number]
 
 export async function importNfe(payload: NfeImportPayload): Promise<NfeImportResult> {
-  const empty = { ok: false, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
+  const empty = { ok: false, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, direcaoIncorreta: 0, cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
   try {
     await requireUser()
     const unit = await getCurrentUnit()
@@ -151,6 +152,8 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
       payload.direcao === "saida" ? note.emitenteCnpj : note.destinatarioCnpj
     const ownNomeOf = (note: NfeImportNota) =>
       payload.direcao === "saida" ? note.emitenteNome : note.destinatarioNome
+    const oppositeCnpjOf = (note: NfeImportNota) =>
+      payload.direcao === "saida" ? note.destinatarioCnpj : note.emitenteCnpj
 
     // units.cnpj é legado (um CNPJ por unidade) — a fonte de verdade pra
     // resolução fiscal é unit_cnpjs (N CNPJs por unidade, por papel), desde
@@ -159,7 +162,7 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
     // aqui — uma nota de entrada não sabe (nem precisa saber) se o CNPJ
     // destinatário está cadastrado como folha, compras ou faturamento.
     const distinctCnpjs = [...new Set(
-      payload.notas.map(ownCnpjOf).filter((cnpj): cnpj is string => Boolean(cnpj))
+      payload.notas.flatMap(note => [ownCnpjOf(note), oppositeCnpjOf(note)]).filter((cnpj): cnpj is string => Boolean(cnpj))
     )]
     const { data: unitCnpjsData, error: unitCnpjsError } = distinctCnpjs.length
       ? await raw.from("unit_cnpjs").select("unit_id,cnpj").eq("ativo", true).in("cnpj", distinctCnpjs)
@@ -171,11 +174,20 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
 
     const resolvidas: Array<NfeImportNota & { unitId: string }> = []
     const cnpjAgg = new Map<string, { nome: string | null; notas: number; valor: number }>()
+    let direcaoIncorreta = 0
     for (const note of payload.notas) {
       const cnpj = ownCnpjOf(note)
       const unitId = cnpj ? unitIdByCnpj.get(cnpj) : undefined
       if (unitId) {
         resolvidas.push({ ...note, unitId })
+        continue
+      }
+      // Se o outro lado da nota é uma unidade conhecida, o arquivo foi enviado
+      // pela tela errada (saída na Entrada ou entrada na Saída). Consumidores e
+      // fornecedores não devem aparecer como sugestão de cadastro de unidade.
+      const oppositeCnpj = oppositeCnpjOf(note)
+      if (oppositeCnpj && unitIdByCnpj.has(oppositeCnpj)) {
+        direcaoIncorreta += 1
         continue
       }
       const key = cnpj ?? "—"
@@ -190,7 +202,12 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
     const naoImportadas = payload.notas.length - resolvidas.length
 
     if (!resolvidas.length) {
-      return { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas, cnpjsDesconhecidos, produtosCriados: 0, vinculosCriados: 0 }
+      if (direcaoIncorreta > 0 && cnpjsDesconhecidos.length === 0) {
+        const encontrada = payload.direcao === "entrada" ? "saída" : "entrada"
+        const destino = payload.direcao === "entrada" ? "NF-e Saída" : "NF-e Entrada"
+        return { ...empty, direcaoIncorreta, naoImportadas, error: `Este pacote contém ${direcaoIncorreta} nota${direcaoIncorreta === 1 ? "" : "s"} de ${encontrada}. Importe-o pela página ${destino}.` }
+      }
+      return { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas, direcaoIncorreta, cnpjsDesconhecidos, produtosCriados: 0, vinculosCriados: 0 }
     }
 
     const keys = resolvidas.map(note => note.chave)
@@ -261,7 +278,7 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
 
     return {
       ok: true, importadas: validas.length, duplicadas: existingKeys.size, canceladas, itens: itemCount,
-      naoImportadas, cnpjsDesconhecidos,
+      naoImportadas, direcaoIncorreta, cnpjsDesconhecidos,
       produtosCriados: catalogo?.produtosCriados ?? 0,
       vinculosCriados: catalogo?.vinculosCriados ?? 0,
     }

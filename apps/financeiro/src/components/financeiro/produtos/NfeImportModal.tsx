@@ -48,7 +48,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
     setStatus("uploading"); setError("")
     // Mantém cada Server Action pequena: pacotes de saída podem ter milhares de XMLs.
     try {
-    const aggregate: NfeImportResult = { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
+    const aggregate: NfeImportResult = { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, direcaoIncorreta: 0, cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
     const cnpjMap = new Map<string, { nome: string | null; notas: number; valor: number }>()
     const batchSize = 75
     for (let i = 0; i < notes.length; i += batchSize) {
@@ -65,6 +65,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       aggregate.canceladas += response.canceladas
       aggregate.itens += response.itens
       aggregate.naoImportadas += response.naoImportadas
+      aggregate.direcaoIncorreta += response.direcaoIncorreta
       aggregate.produtosCriados += response.produtosCriados
       aggregate.vinculosCriados += response.vinculosCriados
       for (const item of response.cnpjsDesconhecidos) {
@@ -117,6 +118,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       {status === "done" && result && <div style={{ padding:"12px 0" }}>
         <h3 style={{ color:"#22c55e", margin:"0 0 8px" }}>Importação concluída</h3>
         <p style={{ fontSize:13, color:"var(--text-2)" }}>{result.importadas} notas importadas · {result.itens} itens · {result.duplicadas} notas atualizadas · {result.canceladas} canceladas{result.naoImportadas > 0 ? ` · ${result.naoImportadas} não importadas` : ""}</p>
+        {result.direcaoIncorreta > 0 && <p style={{ fontSize:12, color:"#f59e0b" }}>{result.direcaoIncorreta} nota{result.direcaoIncorreta !== 1 ? "s" : ""} ignorada{result.direcaoIncorreta !== 1 ? "s" : ""} por pertencer{result.direcaoIncorreta === 1 ? "" : "em"} à direção oposta.</p>}
         {(result.produtosCriados > 0 || result.vinculosCriados > 0) && (
           <p style={{ fontSize:12, color:"var(--text-3)", marginTop: 4 }}>
             Catálogo: {result.produtosCriados} produto{result.produtosCriados !== 1 ? "s" : ""} novo{result.produtosCriados !== 1 ? "s" : ""} · {result.vinculosCriados} item{result.vinculosCriados !== 1 ? "s" : ""} vinculado{result.vinculosCriados !== 1 ? "s" : ""}
