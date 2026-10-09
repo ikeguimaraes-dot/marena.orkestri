@@ -20,7 +20,6 @@ export function contasOperacionais(linha: string, titulos: TituloOperacional[], 
     c.total = Math.round((c.total + valor) * 100) / 100
     contas.set(conta, c)
   }
-  if (linha === 'Manutenção') add('Manutenção — zerada por definição', '', 0)
   if (linha === 'Administrativo') {
     for (const f of folha) {
       if (normalizarConta(f.nome) !== 'CINTIA OLIVEIRA DE CARVALHO' || f.etapa !== 'mensal') continue

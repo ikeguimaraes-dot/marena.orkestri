@@ -12,7 +12,7 @@ test('utilidades reconhecem contas de consumo sem confundir água para revenda o
  const rows=[t('ALUGUEL',43217.64),t('ENERGIA',8494.18),t('CONSUMO ÁGUA',6167.82),t('INTERNET',333.56)];
  assert.equal(contasOperacionais('Ocupação',rows,[])[0].total,43217.64);
  assert.equal(contasOperacionais('Utilidades',rows,[]).reduce((s,c)=>s+c.total,0),14995.56);
- assert.equal(contasOperacionais('Manutenção',rows,[])[0].total,0);
+ assert.equal(contasOperacionais('Manutenção',rows,[]).length,0);
 });
 test('itens de NF-e de entrada seguem o plano de contas operacional',()=>{
  const item=(descricao,ncm='',fornecedor='')=>({item_descricao:descricao,tipo_item:ncm,fornecedor_nome:fornecedor});
