@@ -62,3 +62,17 @@ para perguntas individuais e possíveis duplicidades. As revisões usam RLS por
 unidade, vínculos compostos impedem referências entre unidades, e autor/data são
 atribuídos pelo banco. Nenhum usuário do app pode sobrescrever ou apagar histórico.
 `tests/ork-review.test.mjs` verifica validação de classificação, vínculo e autoria.
+
+## Correção de timeout de leitura (2026-10-09)
+
+Logs de produção de Receita e Despesas apresentavam `statement timeout`.
+As políticas de leitura chamavam `financeiro_can_read(unit_id)` por evidência.
+A migração `20261009151812_ork_read_policy_performance.sql` mantém os mesmos
+predicados de autorização, calculando fundador e unidades acessíveis em InitPlans.
+Não muda dados, permissões de escrita, funções de autorização ou limites de tempo.
+
+Verificação autenticada: listagem de despesas (60 registros, ordenação original)
+passou de 4026 ms para 11,7 ms no EXPLAIN ANALYZE. Totais de receita e despesas
+passaram com statement_timeout de 3 segundos. Usuário sem vínculo retornou zero
+evidências, revisões e totais. Auditor não apontou alertas para os objetos Ork.
+Essas medições são de banco, não um teste visual autenticado no navegador.
