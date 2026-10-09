@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {loadTs} from './helpers/load-ts.mjs';
 const {contasOperacionais,categoriaOperacional}=loadTs('src/lib/dre/regras-operacionais.ts');
+const {classificarItemNfeDespesa,agregarItensNfeDespesa}=loadTs('src/lib/dre/nfe-despesas.ts');
 test('utilidades reconhecem contas de consumo sem confundir água para revenda ou limpeza',()=>{
  assert.equal(categoriaOperacional('CONSUMO ÁGUA'),'Água e esgoto');
  assert.equal(categoriaOperacional('CONSUMO DE ENERGIA'),'Energia elétrica');
@@ -12,6 +13,25 @@ test('utilidades reconhecem contas de consumo sem confundir água para revenda o
  assert.equal(contasOperacionais('Ocupação',rows,[])[0].total,43217.64);
  assert.equal(contasOperacionais('Utilidades',rows,[]).reduce((s,c)=>s+c.total,0),14995.56);
  assert.equal(contasOperacionais('Manutenção',rows,[])[0].total,0);
+});
+test('itens de NF-e de entrada seguem o plano de contas operacional',()=>{
+ const item=(descricao,ncm='',fornecedor='')=>({item_descricao:descricao,tipo_item:ncm,fornecedor_nome:fornecedor});
+ const gas=classificarItemNfeDespesa(item('ONU 1075 GLP 2.1 - P-13','27111910')); assert.equal(gas.linha,'Utilidades');assert.equal(gas.conta,'Gás Encanado');
+ const limpeza=classificarItemNfeDespesa(item('NEUTER SUPER - 05 LT GL DETERGENTE','34029039')); assert.equal(limpeza.linha,'Operação');assert.equal(limpeza.conta,'Material de Limpeza');
+ const embalagem=classificarItemNfeDespesa(item('SACO PLAST.P/VACUO 35X45 0,18 C/500','39239090')); assert.equal(embalagem.linha,'Operação');assert.equal(embalagem.conta,'Embalagens');
+ const manutencao=classificarItemNfeDespesa(item('COMP ELGIN ECB2480E 2.0 220V','84143019','CAPITAL REFRIG - SP')); assert.equal(manutencao.linha,'Manutenção');assert.equal(manutencao.conta,'Manutenção e Conservação');
+ const adm=classificarItemNfeDespesa(item('TONER BROTHER TNB021BR','84439933')); assert.equal(adm.linha,'Administrativo');assert.equal(adm.conta,'Material de Escritório');
+ assert.equal(classificarItemNfeDespesa(item('FREEZER VERTICAL BUCHOLZ','84185090','MAQGEL')),null,'imobilizado ambíguo não entra automaticamente na DRE');
+ assert.equal(classificarItemNfeDespesa(item('RICOTA NO SACO COM 2 KG','04061090')),null,'alimento com palavra saco continua no CMV');
+});
+test('agregação de NF-e ignora canceladas e soma competência sem arredondamento acumulado',()=>{
+ const base={fornecedor_nome:'DISTUDO',tipo_item:'34029039',ano_lancamento:2026,mes_lancamento:6,v_total_embalagem:null};
+ const contas=agregarItensNfeDespesa([
+  {...base,chave_nfe:'ok',item_descricao:'DETERGENTE NEUTRO',v_custo_total:10.125},
+  {...base,chave_nfe:'ok',item_descricao:'DETERGENTE NEUTRO',v_custo_total:2.125},
+  {...base,chave_nfe:'cancelada',item_descricao:'DETERGENTE NEUTRO',v_custo_total:99},
+ ],new Set(['ok']),2026);
+ assert.equal(contas.length,1);assert.equal(contas[0].total,12.26);assert.equal(contas[0].meses['2026-06-01'],12.26);
 });
 test('administrativo inclui somente Cintia e soma pagamento e bonificação sem descontar nem somar vale',()=>{
  const f=(nome,etapa,pagamento,bonificacao)=>({nome,etapa,pagamento,bonificacao,competencia:'2026-08'});

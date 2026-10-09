@@ -12,6 +12,7 @@ import { requireUser } from "@maza/auth/server"
 
 import { normalizeDescricao } from "@/lib/financeiro/normalizeDescricao"
 import { extrairCalibre } from "@/lib/financeiro/produtos/extrairCalibre"
+import { classificarItemNfeDespesa } from "@/lib/dre/nfe-despesas"
 
 // Categorias de desc_gerencial que são despesa administrativa/financeira/folha,
 // não produto comprado. Usada só para linhas SEM NCM (planilha) na geração
@@ -265,17 +266,22 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
         valor_total: note.valorTotal, status_sefaz: note.statusSefaz, cancelada: note.cancelada,
         ...(note.xmlOriginal ? (note.eventoCancelamento ? { xml_cancelamento: note.xmlOriginal } : { xml_original: note.xmlOriginal }) : {}),
       }] })
-      const rows = note.cancelada ? [] : note.itens.map((item, index) => ({
-        unit_id: note.unitId, chave_nfe: note.chave, fornecedor_nome: note.emitenteNome, nr_danfe: note.numero,
-        v_total_danfe: note.valorTotal, dt_emissao: note.emissao,
-        item_nfe: index + 1, item_codigo: item.codigo ?? String(index + 1), item_descricao: item.descricao,
-        unidade_medida: item.unidade, tipo_item: item.ncm, q_embalagem: item.quantidade, q_estoque: item.quantidade,
-        v_embalagem: item.valorUnitario, v_total_embalagem: item.valorTotal,
-        v_custo_medio: item.valorUnitario, v_custo_compra: item.valorUnitario, v_custo_total: item.valorTotal,
-        perc_variacao: null, calcula_cmv: payload.direcao === "entrada", fornecedor_codigo: note.emitenteCnpj,
-        cfop: item.cfop, codigo_gerencial: item.cfop, desc_gerencial: payload.direcao === "entrada" ? "NF-e sem classificação" : "NF-e saída",
-        direcao_nfe: payload.direcao, mes_lancamento: Number(note.emissao.slice(5, 7)), ano_lancamento: Number(note.emissao.slice(0, 4)),
-      }))
+      const rows = note.cancelada ? [] : note.itens.map((item, index) => {
+        const despesa = payload.direcao === "entrada" ? classificarItemNfeDespesa({
+          item_descricao: item.descricao, fornecedor_nome: note.emitenteNome, tipo_item: item.ncm,
+        }) : null;
+        return {
+          unit_id: note.unitId, chave_nfe: note.chave, fornecedor_nome: note.emitenteNome, nr_danfe: note.numero,
+          v_total_danfe: note.valorTotal, dt_emissao: note.emissao,
+          item_nfe: index + 1, item_codigo: item.codigo ?? String(index + 1), item_descricao: item.descricao,
+          unidade_medida: item.unidade, tipo_item: item.ncm, q_embalagem: item.quantidade, q_estoque: item.quantidade,
+          v_embalagem: item.valorUnitario, v_total_embalagem: item.valorTotal,
+          v_custo_medio: item.valorUnitario, v_custo_compra: item.valorUnitario, v_custo_total: item.valorTotal,
+          perc_variacao: null, calcula_cmv: payload.direcao === "entrada" && !despesa, fornecedor_codigo: note.emitenteCnpj,
+          cfop: item.cfop, codigo_gerencial: item.cfop, desc_gerencial: payload.direcao === "entrada" ? (despesa?.conta ?? "NF-e sem classificação") : "NF-e saída",
+          direcao_nfe: payload.direcao, mes_lancamento: Number(note.emissao.slice(5, 7)), ano_lancamento: Number(note.emissao.slice(0, 4)),
+        };
+      })
       operations.push(...replacement("produtos_relatorio", { unit_id: note.unitId, chave_nfe: note.chave }, rows))
       itemCount += rows.length
     }

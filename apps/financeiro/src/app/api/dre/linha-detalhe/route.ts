@@ -2,6 +2,7 @@ import { indicadoresReceita, type DiaIndicador, type PagamentoIndicador } from "
 import { fetchAllPaginado } from "@/lib/financeiro/razao/gerar";
 import { contasOperacionais, type TituloOperacional, type FolhaOperacional } from "@/lib/dre/regras-operacionais";
 import { getServiceClient, jsonOk, jsonError, corsOptions, resolveEmpresa } from "@/lib/dre/api";
+import { agregarItensNfeDespesa, type ItemNfeDespesa } from "@/lib/dre/nfe-despesas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,12 +25,26 @@ export async function GET(req: Request) {
     const ano = Number(searchParams.get("ano")) || new Date().getFullYear();
 
     const supabase = await getServiceClient();
+    const unitId = searchParams.get("unidade");
+    const linhasComNfe = ["Ocupação", "Utilidades", "Operação", "Manutenção", "Marketing", "Administrativo"];
+    const carregarDespesasNfe = async () => {
+      if (!unitId || !/^[0-9a-f-]{36}$/i.test(unitId)) return [];
+      const [itens, documentos] = await Promise.all([
+        fetchAllPaginado<ItemNfeDespesa>((from, to) => supabase.from("produtos_relatorio")
+          .select("id,chave_nfe,item_descricao,fornecedor_nome,tipo_item,v_custo_total,v_total_embalagem,ano_lancamento,mes_lancamento")
+          .eq("unit_id", unitId).eq("direcao_nfe", "entrada").eq("ano_lancamento", ano).not("chave_nfe", "is", null).order("id").range(from, to)),
+        fetchAllPaginado<{ chave: string }>((from, to) => supabase.from("nfe_documentos")
+          .select("id,chave").eq("unit_id", unitId).eq("direcao", "entrada").eq("cancelada", false)
+          .gte("emissao", `${ano}-01-01T00:00:00-03:00`).lt("emissao", `${ano + 1}-01-01T00:00:00-03:00`).order("id").range(from, to)),
+      ]);
+      return agregarItensNfeDespesa(itens, new Set(documentos.map((d) => d.chave)), ano);
+    };
     if (["Marketing", "Taxas Cartão"].includes(linha)) {
-      const unitId = searchParams.get("unidade");
       if (!unitId || !/^[0-9a-f-]{36}$/i.test(unitId)) return jsonError("Selecione uma unidade válida", 400);
-      const [dias, ultimo] = await Promise.all([
+      const [dias, ultimo, despesasNfe] = await Promise.all([
         fetchAllPaginado<DiaIndicador>((from,to) => supabase.from("receita_dias").select("id,data,desconto").eq("unit_id",unitId).gte("data",`${ano}-01-01`).lt("data",`${ano+1}-01-01`).order("id").range(from,to)),
         supabase.from("receita_dias").select("data").eq("unit_id",unitId).order("data",{ascending:false}).limit(1),
+        linha === "Marketing" ? carregarDespesasNfe() : Promise.resolve([]),
       ]);
       if (ultimo.error) throw new Error(ultimo.error.message);
       const pagamentos: PagamentoIndicador[] = [];
@@ -39,26 +54,35 @@ export async function GET(req: Request) {
       const indicadores = indicadoresReceita(dias,pagamentos);
       const meses = Array.from({length:12},(_,i)=>`${ano}-${String(i+1).padStart(2,"0")}-01`);
       const mesesValores = linha === "Marketing" ? indicadores.descontos : indicadores.taxas;
-      const contas = [{conta:linha === "Marketing" ? "Influencers — descontos da Receita" : "Taxa de cartão — 3% do recebido",esperada_mensal:false,meses:mesesValores,total:Object.values(mesesValores).reduce((s,v)=>s+v,0)}];
+      const contas = [{conta:linha === "Marketing" ? "Influencers — descontos da Receita" : "Taxa de cartão — 3% do recebido",esperada_mensal:false,meses:mesesValores,total:Object.values(mesesValores).reduce((s,v)=>s+v,0)},
+        ...despesasNfe.filter((c) => c.linha === linha).map((c) => ({ conta: c.conta, esperada_mensal: false, meses: c.meses, total: c.total }))];
       return jsonOk({linha,ano,empresa:unitId,meses,contas,esperadas:[],total:contas.reduce((s,c)=>s+c.total,0),meses_com_dados:[...new Set(dias.map(d=>`${d.data.slice(0,7)}-01`))].sort(),ultimo_mes_unidade:ultimo.data?.[0]?.data?`${ultimo.data[0].data.slice(0,7)}-01`:null,
-        observacao:linha === "Marketing" ? "Influencers usa o valor dos descontos registrado na Receita, conforme regra definida. Não é somado novamente à receita líquida." : "Estimativa gerencial: 3% sobre todo o recebido, inclusive formas de pagamento que não são cartão.",
+        observacao:linha === "Marketing" ? "Inclui descontos registrados na Receita e despesas identificadas nos itens das NF-e de entrada. Itens sem correspondência inequívoca no plano de contas não são classificados automaticamente." : "Estimativa gerencial: 3% sobre todo o recebido, inclusive formas de pagamento que não são cartão.",
         pendente:false, base_recebido:indicadores.recebido});
     }
-    if (["Ocupação", "Utilidades", "Administrativo", "Manutenção", "Impostos", "Despesas Financeiras"].includes(linha)) {
-      const unitId = searchParams.get("unidade");
+    if ([...linhasComNfe, "Impostos", "Despesas Financeiras"].includes(linha)) {
       if (!unitId || !/^[0-9a-f-]{36}$/i.test(unitId)) return jsonError("Selecione uma unidade válida", 400);
-      const [titulos, folha] = await Promise.all([
+      const [titulos, folha, despesasNfe] = await Promise.all([
         fetchAllPaginado<TituloOperacional>((from, to) => supabase.from("titulos_a_pagar")
           .select("id,descricao_c_gerencial,v_titulo,d_competencia,d_lancamento,d_vencimento,ref_mes,liquidacao_origem")
           .eq("unit_id", unitId).eq("origem", "contas_pagar").order("id").range(from, to)),
         linha === "Administrativo" ? fetchAllPaginado<FolhaOperacional>((from, to) => supabase.from("folha_empresa")
           .select("id,competencia,etapa,nome,pagamento,bonificacao").eq("unit_id", unitId)
           .eq("nome_chave", "CINTIA OLIVEIRA DE CARVALHO").order("id").range(from, to)) : Promise.resolve([]),
+        linhasComNfe.includes(linha) ? carregarDespesasNfe() : Promise.resolve([]),
       ]);
       const datas = [...titulos.map(t => t.d_competencia ?? t.ref_mes ?? t.d_lancamento ?? t.d_vencimento), ...folha.map(f => `${f.competencia}-01`)].filter((d): d is string => !!d).map(d => `${d.slice(0,7)}-01`).sort();
       const contas = contasOperacionais(linha, titulos.filter(t => (t.d_competencia ?? t.ref_mes ?? t.d_lancamento ?? t.d_vencimento)?.startsWith(`${ano}-`)), folha.filter(f => f.competencia.startsWith(`${ano}-`)));
+      for (const contaNfe of despesasNfe.filter((c) => c.linha === linha)) {
+        const existente = contas.find((c) => c.conta === contaNfe.conta);
+        if (existente) {
+          for (const [mes, valor] of Object.entries(contaNfe.meses)) existente.meses[mes] = Math.round(((existente.meses[mes] ?? 0) + valor) * 100) / 100;
+          existente.total = Math.round((existente.total + contaNfe.total) * 100) / 100;
+        } else contas.push({ conta: contaNfe.conta, esperada_mensal: false, meses: contaNfe.meses, total: contaNfe.total });
+      }
       const fontePlanilha = ["Impostos", "Despesas Financeiras"].includes(linha);
-      return jsonOk({ fonte_planilha: fontePlanilha, observacao: fontePlanilha ? "Valores informados na planilha de gastos, separados por unidade e competência. Não há estimativa por alíquota. O lançamento de um valor não confirma sua quitação; marcadores como ** permanecem sem confirmação de pagamento." : undefined, linha, ano, empresa: unitId, meses: Array.from({length:12}, (_,i) => `${ano}-${String(i+1).padStart(2,"0")}-01`), contas, esperadas: [], total: contas.reduce((s,c)=>s+c.total,0), meses_com_dados: [...new Set(datas.filter(d=>d.startsWith(`${ano}-`)))], ultimo_mes_unidade: datas.at(-1) ?? null });
+      const mesesNfe = despesasNfe.flatMap((c) => Object.keys(c.meses));
+      return jsonOk({ fonte_planilha: fontePlanilha, observacao: fontePlanilha ? "Valores informados na planilha de gastos, separados por unidade e competência. Não há estimativa por alíquota. O lançamento de um valor não confirma sua quitação; marcadores como ** permanecem sem confirmação de pagamento." : linhasComNfe.includes(linha) ? "Valores classificados a partir dos itens das NF-e de entrada e, quando disponíveis, das demais fontes já conciliadas. Itens ambíguos ou sem correspondência no plano de contas não são incluídos automaticamente." : undefined, linha, ano, empresa: unitId, meses: Array.from({length:12}, (_,i) => `${ano}-${String(i+1).padStart(2,"0")}-01`), contas, esperadas: [], total: contas.reduce((s,c)=>s+c.total,0), meses_com_dados: [...new Set([...datas.filter(d=>d.startsWith(`${ano}-`)), ...mesesNfe])].sort(), ultimo_mes_unidade: [...datas, ...mesesNfe].sort().at(-1) ?? null });
     }
     let q = supabase
       .from("titulos_a_pagar")

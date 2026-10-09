@@ -23,6 +23,15 @@ componentes enquanto a base canônica é conciliada. Divergências e dúvidas n�
 ser apagadas ou resolvidas por suposição: elas devem aparecer na Inteligência e ser
 respondidas com histórico.
 
+### Classificação das NF-e de entrada na DRE
+
+- A estrutura foi conferida na planilha `Estrutura Plano de Contas DRE.xlsx`.
+- Itens das NF-e de entrada alimentam `Utilidades`, `Operação`, `Manutenção`, `Administrativo` e `Marketing` quando há correspondência inequívoca; `Ocupação` continua sem documento fiscal compatível.
+- A tela `Operação` usa o mesmo detalhamento mensal/anual das demais linhas da DRE.
+- Itens classificados como despesa deixam de compor o CMV, inclusive nas próximas importações.
+- Reclassificação da Marena em junho/2026: Gás Encanado R$ 3.360,00; Manutenção e Conservação R$ 12.673,95; Decoração e Paisagismo R$ 1.034,50; Embalagens R$ 16.513,72; Material de Limpeza R$ 17.907,28; Utensílios R$ 12.666,10; Material de Escritório R$ 509,00.
+- Verificação: 93 testes aprovados, `tsc --noEmit` aprovado e build Next.js aprovado com webpack. O Turbopack local não conseguiu abrir sua porta interna no ambiente de execução.
+
 ## 2. Empresa e unidade original
 
 - Razão social: FOOD-SOCIETY HG VOLANO LTDA
