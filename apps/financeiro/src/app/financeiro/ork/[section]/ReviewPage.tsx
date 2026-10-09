@@ -2,18 +2,20 @@ import Link from 'next/link';
 import { z } from 'zod';
 import { createFinanceiroClient } from '@/lib/financeiro/db/client';
 import { REVIEW_NATURE, REVIEW_STATUS } from '@/lib/ork/review';
+import {defaultOrkPeriod,periodLabel,periodRange} from '@/lib/ork/period';
 import { ReviewForm } from './ReviewForm';
+import {PeriodFilter} from './PeriodFilter';
+import {ReviewMonthlyTable,type ReviewListRow} from './ReviewMonthlyTable';
 import styles from './page.module.css';
 
 const money=(n:number|null)=>n===null?'Não informado':Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-type Row={id:string;description:string;entity:string|null;occurred_on:string|null;amount:number|null;source:string;source_ref:string;category_original:string|null;review_status:keyof typeof REVIEW_STATUS;reviewed_nature:keyof typeof REVIEW_NATURE|null;reviewed_category:string|null;related_evidence_id:string|null};
+type Row=ReviewListRow&{related_evidence_id:string|null};
 const label=(r:Row)=>`${r.source.toUpperCase()} · ${r.occurred_on??'Sem data'} · ${r.entity??r.description} · ${money(r.amount)} · ${r.source_ref}`;
 
 export async function ReviewPage({unitId,sp}:{unitId:string;sp:Record<string,string|undefined>}) {
  const db=await createFinanceiroClient();
- const id=z.uuid().safeParse(sp.id),period=/^20\d{2}-(0[1-9]|1[0-2])$/.test(sp.period??'')?sp.period:null;
+ const id=z.uuid().safeParse(sp.id);
  const status=sp.status&&Object.hasOwn(REVIEW_STATUS,sp.status)?sp.status:null;
- const page=Math.max(1,Math.min(10000,parseInt(sp.page??'1',10)||1)),size=40;
  const q=(sp.q??'').trim().slice(0,100).replace(/[%_\\]/g,'');
  if(id.success) {
   const [{data:row,error},{data:history,error:he},{data:canWrite,error:we}]=await Promise.all([
@@ -37,7 +39,7 @@ export async function ReviewPage({unitId,sp}:{unitId:string;sp:Record<string,str
   }
   return <>
    <Link href="/financeiro/ork/revisao">← Voltar à revisão</Link>
-   <section className={styles.panel}><h2>{r.description}</h2><p>{label(r)}</p><p>Categoria original: {r.category_original??'Não informada'}</p><p>Situação: {REVIEW_STATUS[r.review_status]}</p>
+   <section className={styles.panel}><h2>{r.description}</h2><p>{label(r)}</p><p>Natureza da planilha: {r.description}</p><p>CC da planilha: {r.category_original??'Não informado'}</p><p>Situação: {REVIEW_STATUS[r.review_status]}</p>
     <ReviewForm key={r.id} unitId={unitId} evidenceId={r.id} canWrite={canWrite===true} candidates={candidates.map(c=>({id:c.id,label:label(c)}))} initial={{status:r.review_status,nature:r.reviewed_nature??'a_confirmar',category:r.reviewed_category??'',related:r.related_evidence_id??''}}/>
    </section>
    <section className={styles.panel}><h2>Comparações por valor</h2><p>Até 20 registros de mesmo valor absoluto, mais o vínculo existente. Não é uma busca completa de duplicidades; coincidência de valor não comprova equivalência. Confira datas, fornecedor e documento.</p>
@@ -48,18 +50,26 @@ export async function ReviewPage({unitId,sp}:{unitId:string;sp:Record<string,str
    </section>
   </>;
  }
- let request=db.from('ork_review_queue').select('*',{count:'exact'}).eq('unit_id',unitId).order('occurred_on',{ascending:false,nullsFirst:false}).order('id');
- if(period) request=request.eq('period',period);
- if(status) request=request.eq('review_status',status);
- if(q) request=request.ilike('description',`%${q}%`);
- const {data,error,count}=await request.range((page-1)*size,page*size-1);
- if(error) throw new Error('Não foi possível carregar os registros para revisão.');
- const href=(n:number)=>`?${new URLSearchParams({...(period?{period}:{}),...(status?{status}:{}),...(q?{q}:{}),page:String(n)})}`;
+ const {data:latest,error:latestError}=await db.from('ork_review_queue').select('period').eq('unit_id',unitId).not('period','is',null).order('period',{ascending:false}).limit(1).maybeSingle();
+ if(latestError) throw new Error('Não foi possível identificar o período mais recente.');
+ const range=periodRange(sp,defaultOrkPeriod(latest?.period));
+ const origin=['operacionais','cartao'].includes(sp.origin??'')?sp.origin:null;
+ const data:Row[]=[];
+ for(let offset=0;offset<40000;offset+=1000){
+  let request=db.from('ork_review_queue').select('*').eq('unit_id',unitId).gte('period',range.from).lte('period',range.to).order('occurred_on',{ascending:false,nullsFirst:false}).order('id');
+  if(status) request=request.eq('review_status',status);
+  if(q) request=request.ilike('description',`%${q}%`);
+  if(origin==='operacionais') request=request.in('details->>sheet',['Despesas Operacionais - 2025','Despesas Operacionais - 2026']);
+  if(origin==='cartao') request=request.in('details->>sheet',['Cartão Crédito','Cartão Crédito - Itaú']);
+  const {data:batch,error}=await request.range(offset,offset+999);
+  if(error) throw new Error('Não foi possível carregar os registros para revisão.');
+  data.push(...((batch??[]) as Row[]));
+  if((batch??[]).length<1000) break;
+ }
+ const count=data.length;
+ const query=new URLSearchParams({from:range.from,to:range.to,...(status?{status}:{}),...(q?{q}:{}),...(origin?{origin}:{})}).toString();
  return <>
-  <form className={styles.filters}><label>Mês informado<input type="month" name="period" defaultValue={period??''}/></label><label>Situação<select name="status" defaultValue={status??''}><option value="">Todas</option>{Object.entries(REVIEW_STATUS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>Descrição<input name="q" defaultValue={q}/></label><button className="maza-button">Filtrar</button><Link href="/financeiro/ork/revisao">Limpar</Link></form>
-  <section className={styles.panel}><h2>Revisão e classificação · {(count??0).toLocaleString('pt-BR')} registros</h2><p>A categoria original é preservada. Revisões não alteram totais nem confirmam lançamentos financeiros.</p><div className={styles.tableWrap}><table><thead><tr><th>Data / origem</th><th>Registro</th><th>Valor</th><th>Classificação</th><th>Situação</th></tr></thead><tbody>
-   {(data as Row[]??[]).map(r=><tr key={r.id}><td>{r.occurred_on??'Sem data'}<small>{r.source.toUpperCase()}</small></td><td><Link href={`?id=${r.id}`}>{r.description}</Link><small>{r.entity}</small></td><td>{money(r.amount)}</td><td>{r.reviewed_category??'A classificar'}<small>Original: {r.category_original??'Não informada'}</small></td><td>{REVIEW_STATUS[r.review_status]}</td></tr>)}{!data?.length&&<tr><td colSpan={5}>Nenhum registro para estes filtros.</td></tr>}
-  </tbody></table></div></section>
-  <nav className={styles.pagination}>{page>1&&<Link href={href(page-1)}>← Anterior</Link>}<span>Página {page} de {Math.max(1,Math.ceil((count??0)/size))}</span>{page*size<(count??0)&&<Link href={href(page+1)}>Próxima →</Link>}</nav>
+  <PeriodFilter range={range} clearHref="/financeiro/ork/revisao"><label>Situação<select name="status" defaultValue={status??''}><option value="">Todas</option>{Object.entries(REVIEW_STATUS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>Origem<select name="origin" defaultValue={origin??''}><option value="">Todas</option><option value="operacionais">Despesas Operacionais</option><option value="cartao">Cartão Crédito</option></select></label><label>Natureza<input name="q" defaultValue={q}/></label></PeriodFilter>
+  <section className={styles.panel}><h2>Revisão por dia · {periodLabel(range)}</h2><p>{count.toLocaleString('pt-BR')} registros. Natureza e CC vêm das colunas E e H da planilha. Revisões ficam separadas e não alteram a fonte.</p><ReviewMonthlyTable rows={data} query={query}/></section>
  </>;
 }

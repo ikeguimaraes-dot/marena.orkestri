@@ -10,8 +10,8 @@ export function ReviewForm({unitId,evidenceId,candidates,initial,canWrite}:{unit
  return <form action={action} className={styles.decision}>
   <input type="hidden" name="unit_id" value={unitId}/><input type="hidden" name="evidence_id" value={evidenceId}/>
   <label>Situação<select name="status" defaultValue={initial.status}>{Object.entries(REVIEW_STATUS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
-  <label>Natureza<select name="nature" defaultValue={initial.nature}>{Object.entries(REVIEW_NATURE).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
-  <label>Categoria revisada<input name="category" maxLength={120} defaultValue={initial.category} placeholder="Ex.: Insumos — alimentos"/></label>
+  <label>Natureza revisada<select name="nature" defaultValue={initial.nature}>{Object.entries(REVIEW_NATURE).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+  <label>CC revisado<input name="category" maxLength={120} defaultValue={initial.category} placeholder="Ex.: fornecedores matéria-prima"/></label>
   <label>Outra evidência para comparação<select name="related_evidence_id" defaultValue={initial.related}><option value="">Sem vínculo</option>{candidates.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
   <label>Justificativa ou pergunta para o cliente<textarea name="explanation" required minLength={5} maxLength={5000} rows={4}/></label>
   <p>Revisar não comprova quitação, não exclui duplicatas e não cria um lançamento ou DRE. Cada envio acrescenta uma entrada ao histórico.</p>

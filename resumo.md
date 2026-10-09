@@ -16,10 +16,12 @@ A planilha não deve aparecer como uma planilha online. Cada informação deve i
 para o menu correspondente: receita, despesas, cartões, caixa, sócios,
 investimentos, orçamento, documentos fiscais e inteligência.
 
-Ainda não será criada uma DRE nova. A finalidade desta etapa é organizar e
-conciliar os dados para que uma DRE possa ser construída futuramente com uma única
-base confiável. Divergências e dúvidas não devem ser apagadas ou resolvidas por
-suposição: elas devem aparecer na Inteligência e ser respondidas com histórico.
+Foi criada uma visão de DRE gerencial preliminar, organizada pelos CCs da planilha.
+Ela não é uma DRE homologada nem alimenta a DRE legada: serve para entender receita,
+CMV, folha, ocupação, manutenção, marketing, administrativas, tributos e demais
+componentes enquanto a base canônica é conciliada. Divergências e dúvidas não devem
+ser apagadas ou resolvidas por suposição: elas devem aparecer na Inteligência e ser
+respondidas com histórico.
 
 ## 2. Empresa e unidade original
 
@@ -59,6 +61,7 @@ O menu da Ork possui:
 - Investimentos
 - Orçamento
 - Documentos fiscais
+- DRE preliminar e seus componentes
 
 Ao selecionar Restaurante Ork, a navegação é redirecionada para esse espaço. Ela
 não deve aparecer nos totais consolidados do grupo.
@@ -210,6 +213,10 @@ Permite registrar, sem alterar a evidência:
 Valor igual é apenas candidato; nunca comprova duplicidade. O histórico é
 append-only. A última revisão define o estado exibido, sem apagar anteriores.
 
+A listagem segue agora o padrão das demais áreas: filtro por intervalo mensal, uma
+linha por dia e expansão dos registros. Natureza corresponde à coluna E da planilha
+e CC à coluna H. Natureza/CC revisados continuam separados dos valores originais.
+
 Arquivos:
 
 - `ReviewPage.tsx`
@@ -226,6 +233,17 @@ natureza de cada área. Cartões mantém previsto, informado, despesas e parcela
 grupos separados; Documentos mantém entrada e saída separadas; Caixa mantém
 entradas, saídas e pendências separadas. Referências sem data aparecem numa linha
 explícita "Sem data informada".
+
+Todas as telas Ork aceitam filtro por período. Despesas e Cartões também permitem
+identificar explicitamente as origens `Despesas Operacionais` e `Cartão Crédito`.
+
+### DRE preliminar
+
+O menu DRE organiza as evidências da planilha por CC, com submenus de Receita, CMV
+e insumos, Folha e pessoal, Ocupação, Manutenção, Marketing, Administrativas,
+Tributos, Financeiras, Outras despesas, Fora da DRE e Não classificados. A base de
+despesas padrão é `Despesas Operacionais`; Cartão Crédito pode ser visto à parte.
+Selecionar todas as fontes não deduplica gastos possivelmente repetidos.
 
 Arquivos reutilizáveis:
 
@@ -289,7 +307,8 @@ possui mudanças incompatíveis com versões conhecidas.
 
 1. Preservar os dados originais da Marena.
 2. Restaurante Ork não entra no consolidado e não recebe CNPJ.
-3. Não criar DRE nesta fase.
+3. A DRE disponível é apenas uma visão gerencial preliminar; não homologar nem
+   alimentar a DRE legada antes da conciliação da base canônica.
 4. Não somar planilha, EFD e NF-e como se fossem a mesma base.
 5. Não classificar automaticamente aportes, empréstimos, transferências ou gastos
    de sócios como despesas da DRE.

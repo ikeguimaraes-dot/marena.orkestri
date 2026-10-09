@@ -1,4 +1,4 @@
-export type MonthlyEvidence={id:string;source:string;source_ref:string;kind:string;occurred_on:string|null;description:string;entity:string|null;amount:number|null;category_original:string|null;details:Record<string,unknown>|null};
+export type MonthlyEvidence={id:string;source:string;source_ref:string;area?:string;kind:string;occurred_on:string|null;period?:string|null;description:string;entity:string|null;amount:number|null;category_original:string|null;details:Record<string,unknown>|null};
 export type MonthlyGroup={key:string;label:string;total:number|null;rows:MonthlyEvidence[]};
 export type MonthlyDay={key:string;date:string|null;records:number;total:number;groups:MonthlyGroup[]};
 

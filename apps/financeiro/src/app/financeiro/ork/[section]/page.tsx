@@ -9,6 +9,7 @@ import styles from "./page.module.css";
 import { ReviewPage } from './ReviewPage';
 import { RevenuePage } from './RevenuePage';
 import { MonthlyAreaPage } from './MonthlyAreaPage';
+import {DrePage} from './DrePage';
 
 export const dynamic='force-dynamic';
 const brl=(n:number|null)=>n===null?'Não informado':Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -28,10 +29,16 @@ export default async function OrkPage({params,searchParams}:{params:Promise<{sec
  if(!Object.hasOwn(ORK_SECTIONS,section)) notFound();
  if(!unit||!isReconciliationUnit(unit)) return <div><h1>Restaurante Ork</h1><p>Selecione Restaurante Ork no seletor de unidades para abrir a conciliação. A Marena permanece com seus dados originais.</p></div>;
  const area=section as OrkSection, db=await createFinanceiroClient();
- if(area==='revisao') return <div className={styles.page}><PageHeading title="Revisão de registros" eyebrow="Restaurante Ork · Conciliação" description="Classificação e acompanhamento por evidência. Sem alterar a fonte ou gerar DRE."/><nav className={styles.tabs} aria-label="Áreas de conciliação">{Object.entries(ORK_SECTIONS).map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}`} aria-current={key===area?'page':undefined}>{label}</Link>)}</nav><ReviewPage unitId={unit.id} sp={sp}/></div>;
- if(area==='receita') return <div className={styles.page}><PageHeading title="Receita" eyebrow="Restaurante Ork" description="Faturamento diário da planilha, separado por turno e forma de pagamento."/><nav className={styles.tabs} aria-label="Áreas de conciliação">{Object.entries(ORK_SECTIONS).map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}`} aria-current={key===area?'page':undefined}>{label}</Link>)}</nav><RevenuePage unitId={unit.id} sp={sp}/></div>;
- if(['despesas','cartoes','caixa','socios','investimentos','orcamento','documentos'].includes(area)) return <div className={styles.page}><PageHeading title={ORK_SECTIONS[area]} eyebrow="Restaurante Ork" description="Visão mensal com os detalhes preservados da fonte."/><nav className={styles.tabs} aria-label="Áreas de conciliação">{Object.entries(ORK_SECTIONS).map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}`} aria-current={key===area?'page':undefined}>{label}</Link>)}</nav><MonthlyAreaPage unitId={unit.id} area={area} sp={sp}/></div>;
+ const mainSections=Object.entries(ORK_SECTIONS).filter(([key])=>!key.startsWith('dre-'));
+ const SectionNav=()=> <nav className={styles.tabs} aria-label="Áreas de conciliação">{mainSections.map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}`} aria-current={key===area||key==='dre'&&area.startsWith('dre')?'page':undefined}>{label}</Link>)}</nav>;
+ if(area==='revisao') return <div className={styles.page}><PageHeading title="Revisão de registros" eyebrow="Restaurante Ork · Conciliação" description="Natureza e CC da planilha, com revisão auditável por evidência."/><SectionNav/><ReviewPage unitId={unit.id} sp={sp}/></div>;
+ if(area==='receita') return <div className={styles.page}><PageHeading title="Receita" eyebrow="Restaurante Ork" description="Faturamento diário da planilha, separado por turno e forma de pagamento."/><SectionNav/><RevenuePage unitId={unit.id} sp={sp}/></div>;
+ if(['despesas','cartoes','caixa','socios','investimentos','orcamento','documentos'].includes(area)) return <div className={styles.page}><PageHeading title={ORK_SECTIONS[area]} eyebrow="Restaurante Ork" description="Visão por período com os detalhes preservados da fonte."/><SectionNav/><MonthlyAreaPage unitId={unit.id} area={area} sp={sp}/></div>;
+ if(area.startsWith('dre')) return <div className={styles.page}><PageHeading title={ORK_SECTIONS[area]} eyebrow="Restaurante Ork" description="Organização gerencial preliminar pelos CCs informados na planilha."/><SectionNav/><DrePage unitId={unit.id} section={area} sp={sp}/></div>;
  const period=sp.period&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(sp.period)?sp.period:null;
+ let from=sp.from&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(sp.from)?sp.from:period;
+ let to=sp.to&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(sp.to)?sp.to:period;
+ if(from&&to&&from>to) [from,to]=[to,from];
  const page=Math.min(10000,Math.max(1,Number.parseInt(sp.page??'1',10)||1)),size=60;
  const query=sp.q?.trim().slice(0,100)??'';
  const source=['planilha','nfe','efd'].includes(sp.source??'')?sp.source:null;
@@ -41,7 +48,7 @@ export default async function OrkPage({params,searchParams}:{params:Promise<{sec
  let rows:Evidence[]=[],issues:Issue[]=[],decisions:Decision[]=[],count=0,totals:{source:string;kind:string;records:number;amount:number|null}[]=[];
  if(area==='inteligencia') {
   let request=db.from('ork_issues').select('*',{count:'exact'}).eq('unit_id',unit.id).order('severity').order('created_at').order('id');
-  if(period) request=request.or(`period.eq.${period},period.is.null`);
+  if(from&&to) request=request.or(`period.is.null,and(period.gte.${from},period.lte.${to})`);
   const {data,error,count:n}=await request.range((page-1)*size,page*size-1);
   if(error) throw new Error(error.message);
   issues=data??[];count=n??0;
@@ -60,11 +67,11 @@ export default async function OrkPage({params,searchParams}:{params:Promise<{sec
  }
  const href=(p:number)=>`?${new URLSearchParams({...Object.fromEntries(Object.entries(sp).filter((entry):entry is [string,string]=>typeof entry[1]==='string')),page:String(p)})}`;
  return <div className={styles.page}>
-  <PageHeading title={ORK_SECTIONS[area]} eyebrow="Restaurante Ork · Conciliação" description="Evidências da planilha e da contabilidade preservadas. Fora do consolidado do grupo; nenhuma DRE gerada." />
+  <PageHeading title={ORK_SECTIONS[area]} eyebrow="Restaurante Ork · Conciliação" description="Evidências da planilha e da contabilidade preservadas. Fora do consolidado do grupo; nenhuma DRE homologada." />
   <p className={styles.notice}>Em validação. Os valores de fontes diferentes não são somados entre si. Resolver uma pergunta não confirma automaticamente um lançamento financeiro.</p>
-  <nav className={styles.tabs} aria-label="Áreas de conciliação">{Object.entries(ORK_SECTIONS).map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}${period?`?period=${period}`:''}`} aria-current={area===key?'page':undefined}>{label}</Link>)}</nav>
+  <SectionNav/>
   <form className={styles.filters}>
-   <label>Período da data informada<input type="month" name="period" defaultValue={period??''}/></label>
+   <label>Período de<input type="month" name="from" defaultValue={from??''}/></label><label>Até<input type="month" name="to" defaultValue={to??''}/></label>
    {area!=='inteligencia'&&<><label>Origem<select name="source" defaultValue={source??''}><option value="">Todas (separadas)</option><option value="planilha">Planilha</option><option value="nfe">Notas fiscais</option><option value="efd">EFD</option></select></label><label>Descrição<input name="q" defaultValue={query} placeholder="Buscar descrição"/></label></>}
    <button className="maza-button" type="submit">Filtrar</button><Link href={`/financeiro/ork/${area}`}>Limpar</Link>
   </form>
