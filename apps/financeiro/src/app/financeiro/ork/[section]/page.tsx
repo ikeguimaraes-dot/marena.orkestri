@@ -8,6 +8,7 @@ import { recordDecision } from "./actions";
 import styles from "./page.module.css";
 import { ReviewPage } from './ReviewPage';
 import { RevenuePage } from './RevenuePage';
+import { MonthlyAreaPage } from './MonthlyAreaPage';
 
 export const dynamic='force-dynamic';
 const brl=(n:number|null)=>n===null?'Não informado':Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -29,6 +30,7 @@ export default async function OrkPage({params,searchParams}:{params:Promise<{sec
  const area=section as OrkSection, db=await createFinanceiroClient();
  if(area==='revisao') return <div className={styles.page}><PageHeading title="Revisão de registros" eyebrow="Restaurante Ork · Conciliação" description="Classificação e acompanhamento por evidência. Sem alterar a fonte ou gerar DRE."/><nav className={styles.tabs} aria-label="Áreas de conciliação">{Object.entries(ORK_SECTIONS).map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}`} aria-current={key===area?'page':undefined}>{label}</Link>)}</nav><ReviewPage unitId={unit.id} sp={sp}/></div>;
  if(area==='receita') return <div className={styles.page}><PageHeading title="Receita" eyebrow="Restaurante Ork" description="Faturamento diário da planilha, separado por turno e forma de pagamento."/><nav className={styles.tabs} aria-label="Áreas de conciliação">{Object.entries(ORK_SECTIONS).map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}`} aria-current={key===area?'page':undefined}>{label}</Link>)}</nav><RevenuePage unitId={unit.id} sp={sp}/></div>;
+ if(['despesas','cartoes','caixa','socios','investimentos','orcamento','documentos'].includes(area)) return <div className={styles.page}><PageHeading title={ORK_SECTIONS[area]} eyebrow="Restaurante Ork" description="Visão mensal com os detalhes preservados da fonte."/><nav className={styles.tabs} aria-label="Áreas de conciliação">{Object.entries(ORK_SECTIONS).map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}`} aria-current={key===area?'page':undefined}>{label}</Link>)}</nav><MonthlyAreaPage unitId={unit.id} area={area} sp={sp}/></div>;
  const period=sp.period&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(sp.period)?sp.period:null;
  const page=Math.min(10000,Math.max(1,Number.parseInt(sp.page??'1',10)||1)),size=60;
  const query=sp.q?.trim().slice(0,100)??'';

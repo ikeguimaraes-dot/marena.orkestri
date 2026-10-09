@@ -217,6 +217,23 @@ Arquivos:
 - `src/lib/ork/review.ts`
 - `tests/ork-review.test.mjs`
 
+### Demais abas mensais
+
+Despesas, Cartões, Caixa, Sócios, Investimentos, Orçamento e Documentos fiscais
+seguem o mesmo padrão de Receita: seletor de mês/ano, resumo mensal, uma linha por
+dia e seta para os detalhes. A apresentação é comum, mas a matemática respeita a
+natureza de cada área. Cartões mantém previsto, informado, despesas e parcelas em
+grupos separados; Documentos mantém entrada e saída separadas; Caixa mantém
+entradas, saídas e pendências separadas. Referências sem data aparecem numa linha
+explícita "Sem data informada".
+
+Arquivos reutilizáveis:
+
+- `MonthlyAreaPage.tsx`
+- `MonthlyAreaTable.tsx`
+- `src/lib/ork/monthly.ts`
+- `tests/ork-monthly.test.mjs`
+
 ## 8. Publicação e repositório
 
 - Repositório: `https://github.com/ikeguimaraes-dot/marena.orkestri.git`
@@ -293,12 +310,11 @@ Entrar autenticado, selecionar Restaurante Ork, abrir Receita e verificar junho 
 deploy foi validado tecnicamente, mas a sessão autenticada ainda precisa de revisão
 visual do usuário.
 
-### 2. Refazer Despesas no mesmo princípio de navegação
+### 2. Validar visualmente as demais abas mensais
 
-A listagem genérica ainda é difícil de usar. A próxima interface deve ser mensal,
-com agrupamento claro, provavelmente por dia/fornecedor/categoria, sem afirmar que
-a data representa quitação ou competência. Definir a hierarquia visual com o
-usuário antes de transformar a classificação.
+Conferir mês, linha diária, expansão e agrupamentos em Despesas, Cartões, Caixa,
+Sócios, Investimentos, Orçamento e Documentos. Ajustar apenas a hierarquia visual;
+não transformar datas ou referências em fatos contábeis sem confirmação.
 
 ### 3. Upload e versionamento da planilha
 
