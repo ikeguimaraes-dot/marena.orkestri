@@ -9,7 +9,8 @@ export function OrkBoundary({children}: {children: React.ReactNode}) {
   const pathname = usePathname();
   const router = useRouter();
   const ork = isReconciliationUnit(unit);
-  const needsRedirect = ork && !pathname.startsWith("/financeiro/ork/");
-  useEffect(() => { if (needsRedirect) router.replace("/financeiro/ork/inteligencia"); }, [needsRedirect,router]);
-  return needsRedirect ? <p role="status">Abrindo a área de conciliação da Restaurante Ork…</p> : children;
+  const inOrk = pathname.startsWith("/financeiro/ork/");
+  const redirectTo = unit && ork !== inOrk ? (ork ? "/financeiro/ork/inteligencia" : "/financeiro") : null;
+  useEffect(() => { if (redirectTo) router.replace(redirectTo); }, [redirectTo,router]);
+  return redirectTo ? <p role="status">Abrindo a unidade selecionada…</p> : children;
 }

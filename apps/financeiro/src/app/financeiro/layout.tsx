@@ -6,6 +6,7 @@ import { fetchNavConfig } from "@maza/ui/nav/fetchNavConfig";
 
 import { FinanceiroTopbar } from "@/components/ui/FinanceiroTopbar";
 import { OrkBoundary } from "@/components/financeiro/OrkBoundary";
+import { isReconciliationUnit, orkNavGroups } from "@/lib/ork/config";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export default async function FinanceiroLayout({
         <a className="maza-skip-link" href="#conteudo">Pular para o conteúdo</a>
         <Sidebar navGroups={navConfig.groups} shellUrl={navConfig.shellUrl} navOffline={navConfig.offline} />
         <div className="maza-workspace-body">
-          <FinanceiroTopbar groups={navConfig.groups} shellUrl={navConfig.shellUrl} />
+          <FinanceiroTopbar groups={isReconciliationUnit(currentUnit) ? orkNavGroups : navConfig.groups} shellUrl={navConfig.shellUrl} />
           <main id="conteudo" tabIndex={-1} className="shell-main maza-page-main">
           <OrkBoundary>{children}</OrkBoundary>
         </main>
