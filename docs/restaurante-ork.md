@@ -1,4 +1,4 @@
-# Restaurante Ork: primeira etapa de conciliação
+# Restaurante Ork: conciliação e revisão de evidências
 
 A unidade é um espaço de conciliação da Marena, não uma nova empresa fiscal.
 Não recebe CNPJ próprio nem mapeamento `unit_cnpjs`. Está fora do consolidado.
@@ -37,8 +37,13 @@ verificar cabeçalhos e ampliar testes.
 - Datas de despesas não foram presumidas como pagamento ou competência.
 - Classificação contábil definitiva e confirmação de fatos estão bloqueadas.
 - A tabela `ork_facts` reserva a base única futura, mas não é populada nesta etapa.
-- Vinculação individual entre comprovantes, confirmação/correção de fatos e
-  revisão de categorias precisam de implementação adicional e homologação.
+- A revisão individual permite classificar natureza/categoria, registrar perguntas
+  e apontar uma possível duplicidade, com histórico append-only. Até 20 candidatos
+  por valor absoluto são sugestões, não conciliação automática. A interface mostra
+  as 100 últimas revisões; todas permanecem no banco. A última inserção prevalece.
+- Categorias revisadas são texto livre, ainda não um plano de contas aprovado.
+  Confirmação/correção de fatos, correspondências com valores diferentes ou muitos
+  comprovantes para um fato precisam de implementação adicional e homologação.
 - Cobertura de blocos legados, fluxo e validações não convertidos está no
   manifesto e na Inteligência; não se afirma conversão integral das 45 abas.
 - O snapshot fiscal é datado e não sincroniza automaticamente novas notas.
@@ -51,3 +56,9 @@ estorno, vencimento de parcela, identidade e referências quebradas.
 Permissões: sem vínculo não lê; app não insere/atualiza/apaga evidências, não
 falsifica autor/data do histórico e não escreve no razão operacional da Ork.
 Antes de ativar a unidade, verificar build publicado e contagens/totais de origem.
+
+`/financeiro/ork/revisao` filtra mês, descrição e situação. A Inteligência aponta
+para perguntas individuais e possíveis duplicidades. As revisões usam RLS por
+unidade, vínculos compostos impedem referências entre unidades, e autor/data são
+atribuídos pelo banco. Nenhum usuário do app pode sobrescrever ou apagar histórico.
+`tests/ork-review.test.mjs` verifica validação de classificação, vínculo e autoria.

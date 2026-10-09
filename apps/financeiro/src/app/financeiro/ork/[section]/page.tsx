@@ -6,6 +6,7 @@ import { ORK_SECTIONS, isReconciliationUnit, type OrkSection } from "@/lib/ork/c
 import { PageHeading } from "@/components/ui/PageHeading";
 import { recordDecision } from "./actions";
 import styles from "./page.module.css";
+import { ReviewPage } from './ReviewPage';
 
 export const dynamic='force-dynamic';
 const brl=(n:number|null)=>n===null?'Não informado':Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -19,11 +20,13 @@ Object.assign(labels,{planilha:'Controle da planilha',efd:'Receita fiscal EFD',n
 const monetaryKeys=new Set(['planilha','efd','notas_saida','diferenca_planilha_efd','diferenca_planilha_notas','previsto','informado','diferenca','pis','cofins','control','imported']);
 function Details({data}:{data:Record<string,unknown>}) { return <dl className={styles.details}>{Object.entries(data).filter(([,v])=>v!==undefined).map(([k,v])=><div key={k}><dt>{labels[k]??k}</dt><dd>{v===null?'Não informado':monetaryKeys.has(k)&&typeof v==='number'?brl(v):Array.isArray(v)?v.join(' · '):typeof v==='object'?JSON.stringify(v):String(v)}</dd></div>)}</dl>; }
 
-export default async function OrkPage({params,searchParams}:{params:Promise<{section:string}>;searchParams:Promise<Record<string,string|undefined>>}) {
- const [{section},sp,unit]=await Promise.all([params,searchParams,getCurrentUnit()]);
- if(!(section in ORK_SECTIONS)) notFound();
+export default async function OrkPage({params,searchParams}:{params:Promise<{section:string}>;searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+ const [{section},rawSearch,unit]=await Promise.all([params,searchParams,getCurrentUnit()]);
+ const sp:Record<string,string|undefined>=Object.fromEntries(Object.entries(rawSearch).map(([k,v])=>[k,Array.isArray(v)?v[0]:v]));
+ if(!Object.hasOwn(ORK_SECTIONS,section)) notFound();
  if(!unit||!isReconciliationUnit(unit)) return <div><h1>Restaurante Ork</h1><p>Selecione Restaurante Ork no seletor de unidades para abrir a conciliação. A Marena permanece com seus dados originais.</p></div>;
  const area=section as OrkSection, db=await createFinanceiroClient();
+ if(area==='revisao') return <div className={styles.page}><PageHeading title="Revisão de registros" eyebrow="Restaurante Ork · Conciliação" description="Classificação e acompanhamento por evidência. Sem alterar a fonte ou gerar DRE."/><nav className={styles.tabs} aria-label="Áreas de conciliação">{Object.entries(ORK_SECTIONS).map(([key,label])=><Link key={key} href={`/financeiro/ork/${key}`} aria-current={key===area?'page':undefined}>{label}</Link>)}</nav><ReviewPage unitId={unit.id} sp={sp}/></div>;
  const period=sp.period&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(sp.period)?sp.period:null;
  const page=Math.min(10000,Math.max(1,Number.parseInt(sp.page??'1',10)||1)),size=60;
  const query=sp.q?.trim().slice(0,100)??'';
@@ -64,6 +67,7 @@ export default async function OrkPage({params,searchParams}:{params:Promise<{sec
   {totals.length>0&&<section className={styles.panel}><h2>Referências do período</h2><p>Totais completos do período, independentes da busca por descrição. Categorias e bases distintas não formam um total único.</p><div className={styles.summaries}>{totals.filter(t=>!source||t.source===source).map(t=><div key={`${t.source}:${t.kind}`}><span>{t.source.toUpperCase()} · {kinds[t.kind]??t.kind}</span><strong>{brl(t.amount)}</strong><small>{Number(t.records).toLocaleString('pt-BR')} registros</small></div>)}</div></section>}
   {area==='inteligencia'?<>
    <section className={styles.panel}><h2>Fontes e cobertura</h2>{imports?.length?imports.map(i=><details key={i.id}><summary>{i.filename} · {new Date(i.created_at).toLocaleDateString('pt-BR')} · Ver cobertura</summary><ul>{(i.manifest?.sheets??[]).map((s:{name:string;records:number;hidden:boolean;disposition:string})=><li key={s.name}><strong>{s.name}{s.hidden?' (oculta)':''}</strong> · {s.records} registros. {s.disposition}</li>)}</ul></details>):<p>Importação ainda em preparação. Nenhuma base parcial é apresentada como concluída.</p>}</section>
+   <section className={styles.panel}><h2>Pendências por registro</h2><p>As perguntas individuais e as possíveis duplicidades ficam na revisão, com a evidência e seu histórico.</p><nav className={styles.tabs}><Link href="/financeiro/ork/revisao?status=aguardando_cliente">Perguntas para o cliente</Link><Link href="/financeiro/ork/revisao?status=possivel_duplicidade">Possíveis duplicidades</Link><Link href="/financeiro/ork/revisao?status=pendente">A revisar</Link></nav></section>
    <h2>Perguntas e divergências · {count}</h2>
    {issues.map(issue=>{const history=decisions.filter(d=>d.issue_id===issue.id),latest=history[0];return <article key={issue.id} className={styles.panel}>
     <div className={styles.issueHeader}><h3>{issue.title}</h3><span>{latest?.status.replaceAll('_',' ')??'aberto'} · {issue.severity}</span></div><p>{issue.question}</p>

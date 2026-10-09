@@ -1,5 +1,6 @@
 export const ORK_SECTIONS = {
   inteligencia: "Inteligência",
+  revisao: "Revisão de registros",
   receita: "Receita",
   despesas: "Despesas e contas a pagar",
   cartoes: "Cartões e recebimentos",
