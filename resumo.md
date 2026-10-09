@@ -241,9 +241,12 @@ identificar explicitamente as origens `Despesas Operacionais` e `Cartão Crédit
 
 O menu DRE organiza as evidências da planilha por CC, com submenus de Receita, CMV
 e insumos, Folha e pessoal, Ocupação, Manutenção, Marketing, Administrativas,
-Tributos, Financeiras, Outras despesas, Fora da DRE e Não classificados. A base de
-despesas padrão é `Despesas Operacionais`; Cartão Crédito pode ser visto à parte.
-Selecionar todas as fontes não deduplica gastos possivelmente repetidos.
+Tributos, Financeiras, Outras despesas, Investimentos/empréstimos/ativos e Não
+classificados. Além do intervalo, há filtro pelo mês do ano. INSS, FGTS e IRRF ficam
+em Tributos. Reembolsos voltam às despesas e depósitos judiciais são separados das
+custas judiciais pela Natureza. A base de despesas padrão é `Despesas Operacionais`;
+Cartão Crédito pode ser visto à parte. Selecionar todas as fontes não deduplica
+gastos possivelmente repetidos.
 
 Arquivos reutilizáveis:
 

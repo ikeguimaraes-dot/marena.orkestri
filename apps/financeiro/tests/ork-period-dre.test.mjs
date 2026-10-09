@@ -21,12 +21,22 @@ test('intervalo preserva mês único, aceita legado e corrige ordem',async()=>{
 test('DRE preliminar usa CC, separa investimento e preserva estorno',async()=>{
  const source=readFileSync(new URL('../src/lib/ork/dre.ts',import.meta.url),'utf8').replace("import type {MonthlyEvidence} from './monthly';",'');
  const output=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2023}}).outputText;
- const {dreGroup,dreSignedAmount}=await import(`data:text/javascript;base64,${Buffer.from(output).toString('base64')}`);
+ const {dreGroup,dreSignedAmount,matchesDreMonth}=await import(`data:text/javascript;base64,${Buffer.from(output).toString('base64')}`);
  const row=(category_original,amount=100,area='despesas')=>({category_original,amount,area});
  assert.equal(dreGroup(row('salários')),'pessoal');
+ assert.equal(dreGroup(row('INSS empresa')),'tributos');
+ assert.equal(dreGroup(row('FGTS Rescisão')),'tributos');
  assert.equal(dreGroup(row('manutenção predial')),'manutencao');
  assert.equal(dreGroup(row('assessoria / prestação de serviço (mkt)')),'marketing');
  assert.equal(dreGroup(row('investimento operacional')),'fora_dre');
+ assert.equal(dreGroup({...row('depósitos judiciais'),description:'Custas Judiciais - Jerdson'}),'administrativas');
+ assert.equal(dreGroup({...row('depósitos judiciais'),description:'Depósito Judicial - Jerdson'}),'fora_dre');
+ assert.equal(dreGroup({...row('reembolso de despesas'),description:'CAT - Acidente Funcionário'}),'pessoal');
+ assert.equal(dreGroup({...row('reembolso de despesa'),description:'Reembolso - Compra Ferro + Filtro de Água'}),'manutencao');
+ assert.equal(dreGroup({...row('reembolso de despesas'),description:'Reembolso de Despesa'}),'administrativas');
  assert.equal(dreSignedAmount(row('salários',-20)),20);
  assert.equal(dreSignedAmount(row(null,50,'receita')),50);
+ assert.equal(matchesDreMonth({period:'2025-06'},'06'),true);
+ assert.equal(matchesDreMonth({period:'2026-07'},'06'),false);
+ assert.equal(matchesDreMonth({period:'2026-07'},null),true);
 });
