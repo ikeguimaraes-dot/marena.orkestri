@@ -1,5 +1,6 @@
 "use client";
 import { unitDisplayName } from "@maza/auth/unit-display";
+import { isReconciliationUnit, orkNavGroups } from "@/lib/ork/config";
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -79,7 +80,7 @@ export function Sidebar(props: SidebarProps) {
     return () => window.clearInterval(timer);
   }, []);
 
-  return <SidebarPresentation {...props} user={user} hasRegisteredUnits={hasRegisteredUnits} unit={unit} units={units} setUnit={setUnit} />;
+  return <SidebarPresentation {...props} navGroups={isReconciliationUnit(unit) ? orkNavGroups : props.navGroups} user={user} hasRegisteredUnits={hasRegisteredUnits} unit={unit} units={units} setUnit={setUnit} />;
 }
 
 /** Presentational entry point also used by the isolated visual preview. */

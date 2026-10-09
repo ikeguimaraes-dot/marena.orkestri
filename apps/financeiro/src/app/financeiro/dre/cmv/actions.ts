@@ -124,6 +124,9 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
     await requireUser()
     const unit = await getCurrentUnit()
     if (!unit) return { ...empty, error: "Unidade não identificada." }
+    if ("reconciliation_source_unit_id" in unit && unit.reconciliation_source_unit_id) {
+      return { ...empty, error: "A Restaurante Ork usa evidências isoladas. Esta importação fiscal não foi executada e nenhum documento da Marena foi alterado." };
+    }
     if (!payload.notas.length) return { ...empty, error: "O ZIP não contém NF-e válida." }
 
     const db = await createFinanceiroClient()

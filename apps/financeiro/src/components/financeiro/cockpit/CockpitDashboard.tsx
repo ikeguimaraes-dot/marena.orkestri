@@ -28,7 +28,7 @@ export async function CockpitDashboard({ searchParams, basePath = "/financeiro" 
   const db = supabase as any;
 
   if (!db) throw new Error("Banco de dados indisponível");
-  const { data: units, error: unitsError } = await db.from("units").select("id").eq("active", true);
+  const { data: units, error: unitsError } = await db.from("units").select("id").eq("active", true).eq("include_in_consolidated", true);
   if (unitsError) throw new Error(unitsError.message);
   const unitIdsTodos: string[] = (units ?? []).map((u: { id: string }) => u.id);
 

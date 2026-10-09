@@ -5,6 +5,7 @@ import { Sidebar } from "@maza/ui/sidebar";
 import { fetchNavConfig } from "@maza/ui/nav/fetchNavConfig";
 
 import { FinanceiroTopbar } from "@/components/ui/FinanceiroTopbar";
+import { OrkBoundary } from "@/components/financeiro/OrkBoundary";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function FinanceiroLayout({
         <div className="maza-workspace-body">
           <FinanceiroTopbar groups={navConfig.groups} shellUrl={navConfig.shellUrl} />
           <main id="conteudo" tabIndex={-1} className="shell-main maza-page-main">
-          {children}
+          <OrkBoundary>{children}</OrkBoundary>
         </main>
         </div>
       </div>
