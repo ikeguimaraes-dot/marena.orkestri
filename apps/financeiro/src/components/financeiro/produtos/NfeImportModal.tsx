@@ -9,6 +9,34 @@ import { parseNfeXml, type NfeDirection, type ParsedNfe } from "@/lib/nfe/parser
 type Props = { direction: NfeDirection; onClose: () => void; onSuccess: () => void }
 type Status = "idle" | "reading" | "ready" | "uploading" | "done" | "error"
 
+const MAX_NOTES_PER_BATCH = 20
+const MAX_BATCH_BYTES = 2_500_000
+
+function sourceLabel(files: File[]) {
+  if (files.length === 1) return files[0]!.name
+  return `${files.length} arquivos selecionados`
+}
+
+export function splitNfeBatches(notes: ParsedNfe[]) {
+  const batches: ParsedNfe[][] = []
+  let batch: ParsedNfe[] = []
+  let batchBytes = 0
+  for (const note of notes) {
+    // O XML original é enviado junto com os campos parseados. Medir o JSON
+    // evita estourar o limite da Server Action com XMLs excepcionalmente grandes.
+    const bytes = new TextEncoder().encode(JSON.stringify(note)).byteLength
+    if (batch.length && (batch.length >= MAX_NOTES_PER_BATCH || batchBytes + bytes > MAX_BATCH_BYTES)) {
+      batches.push(batch)
+      batch = []
+      batchBytes = 0
+    }
+    batch.push(note)
+    batchBytes += bytes
+  }
+  if (batch.length) batches.push(batch)
+  return batches
+}
+
 export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<Status>("idle")
@@ -18,12 +46,14 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
   const direction = fixedDirection
   const [error, setError] = useState("")
   const [result, setResult] = useState<NfeImportResult | null>(null)
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
 
   async function readFiles(files: File[]) {
-    setStatus("reading"); setError(""); setNotes([]); setFileName(files.map(file => file.name).join(", "))
+    setStatus("reading"); setError(""); setNotes([]); setFileName(sourceLabel(files))
     try {
       const parsed: ParsedNfe[] = []
       let invalid = 0
+      let pdfs = 0
       for (const file of files) {
         if (file.name.toLowerCase().endsWith(".xml")) {
           try { parsed.push(parseNfeXml(await file.text(), file.name)) } catch { invalid++ }
@@ -34,9 +64,13 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
           for (const entry of xmlFiles) {
             try { parsed.push(parseNfeXml(await entry.async("string"), entry.name)) } catch { invalid++ }
           }
+        } else if (file.name.toLowerCase().endsWith(".pdf")) {
+          pdfs++
         } else { invalid++ }
       }
+      if (!parsed.length && pdfs > 0) throw new Error("PDF/DANFE não contém os dados fiscais necessários para esta importação. Baixe os XMLs das notas no portal da Receita e selecione os XMLs ou um ZIP com eles.")
       if (!parsed.length) throw new Error("Nenhum XML de NF-e/NFC-e válido foi encontrado.")
+      invalid += pdfs
       setNotes(parsed.sort((a, b) => Number(!!a.eventoCancelamento) - Number(!!b.eventoCancelamento))); setRejected(invalid); setStatus("ready")
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e)); setStatus("error")
@@ -51,13 +85,15 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
     const aggregate: NfeImportResult = { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, direcaoIncorreta: 0, unitIds: [], cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
     const cnpjMap = new Map<string, { nome: string | null; notas: number; valor: number }>()
     const affectedUnitIds = new Set<string>()
-    const batchSize = 75
-    for (let i = 0; i < notes.length; i += batchSize) {
+    const batches = splitNfeBatches(notes)
+    setProgress({ current: 0, total: batches.length })
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i]!
       const response = await importNfe({
         arquivo: fileName,
         adiarRecalculo: true,
         direcao: direction,
-        notas: notes.slice(i, i + batchSize),
+        notas: batch,
         rejeitadas: i === 0 ? rejected : 0,
       })
       if (!response.ok) { setError(response.error ?? "Falha na importação."); setStatus("error"); return }
@@ -77,6 +113,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
         if (!acc.nome && item.nome) acc.nome = item.nome
         cnpjMap.set(item.cnpj, acc)
       }
+      setProgress({ current: i + 1, total: batches.length })
     }
     aggregate.cnpjsDesconhecidos = [...cnpjMap.entries()].map(([cnpj, v]) => ({ cnpj, ...v }))
     if (aggregate.importadas > 0 || aggregate.itens > 0 || aggregate.canceladas > 0) {
@@ -95,13 +132,14 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
   return createPortal(<div style={{ position:"fixed", inset:0, zIndex:1000, background:"rgba(0,0,0,.62)", display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e => { if (e.target === e.currentTarget && !busy) onClose() }}>
     <div style={box}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-        <div><h2 style={{ margin:0, fontSize:18 }}>Importar NF-e / NFC-e</h2><p style={{ margin:"4px 0 0", fontSize:12, color:"var(--text-3)" }}>XMLs avulsos ou pacotes ZIP de entrada ou saída</p></div>
+        <div><h2 style={{ margin:0, fontSize:18 }}>Importar NF-e / NFC-e</h2><p style={{ margin:"4px 0 0", fontSize:12, color:"var(--text-3)" }}>Vários XMLs ou pacotes ZIP de entrada ou saída</p></div>
         {!busy && <button onClick={onClose} aria-label="Fechar" style={{ background:"none", border:0, color:"var(--text-3)", cursor:"pointer", fontSize:20 }}>×</button>}
       </div>
 
       {(status === "idle" || status === "error") && notes.length === 0 && <label style={{ display:"grid", placeItems:"center", gap:8, padding:28, border:"2px dashed var(--border)", borderRadius:10, cursor:"pointer" }}>
-        <span style={{ fontSize:30 }}>📦</span><span style={{ fontSize:13, color:"var(--text-2)" }}>{fileName || "Selecionar XMLs ou ZIP"}</span>
-        <input ref={inputRef} type="file" multiple accept=".zip,.xml,application/zip,application/xml,text/xml" hidden onChange={e => { const files=Array.from(e.target.files??[]); if(files.length) void readFiles(files) }} />
+        <span style={{ fontSize:30 }}>📦</span><span style={{ fontSize:13, color:"var(--text-2)" }}>{fileName || "Selecionar vários XMLs ou ZIPs"}</span>
+        <span style={{ fontSize:11, color:"var(--text-3)", textAlign:"center" }}>PDF/DANFE não substitui o XML fiscal. Para importar, baixe os XMLs no portal da Receita.</span>
+        <input ref={inputRef} type="file" multiple accept=".zip,.xml,.pdf,application/zip,application/xml,text/xml,application/pdf" hidden onChange={e => { const files=Array.from(e.target.files??[]); if(files.length) void readFiles(files) }} />
       </label>}
 
       {status === "reading" && <p style={{ padding:30, textAlign:"center", color:"var(--text-3)" }}>Lendo e validando os XMLs…</p>}
@@ -118,7 +156,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       </>}
 
       {error && <div style={{ padding:"9px 12px", marginTop:12, borderRadius:7, background:"rgba(239,68,68,.1)", color:"#ef4444", fontSize:12 }}>{error}</div>}
-      {status === "uploading" && <p style={{ padding:28, textAlign:"center", color:"var(--text-3)" }}>Salvando notas e atualizando o CMV…</p>}
+      {status === "uploading" && <p style={{ padding:28, textAlign:"center", color:"var(--text-3)" }}>Salvando notas em lotes… {progress.current}/{progress.total}</p>}
       {status === "done" && result && <div style={{ padding:"12px 0" }}>
         <h3 style={{ color:"#22c55e", margin:"0 0 8px" }}>Importação concluída</h3>
         <p style={{ fontSize:13, color:"var(--text-2)" }}>{result.importadas} notas novas · {result.itens} itens gravados · {result.duplicadas} notas já existentes · {result.canceladas} canceladas{result.naoImportadas > 0 ? ` · ${result.naoImportadas} não importadas` : ""}</p>
