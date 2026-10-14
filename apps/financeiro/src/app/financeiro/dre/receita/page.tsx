@@ -506,7 +506,7 @@ export default function ReceitaPage() {
         </section>
       )}
       {aba === "receita" && <>
-      {unit && <EfdReceita key={`${unit.id}-${ano}-${mes}`} unitId={unit.id} competencia={`${ano}-${String(mes).padStart(2, "0")}`} allowImport={showImport} />}
+      {unit && <EfdReceita key={`${unit.id}-${ano}-${mes}`} unitId={unit.id} competencia={`${ano}-${String(mes).padStart(2, "0")}`} allowImport={showImport} onSaved={() => { void loadData(); }} />}
 
       {/* Import panel */}
       {showImport && (

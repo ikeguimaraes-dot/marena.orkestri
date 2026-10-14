@@ -5,7 +5,7 @@ import { readEfdPdf } from "@/lib/receita/efd-browser";
 import type { EfdResumo, EfdVendaDia } from "@/lib/receita/efd";
 
 const brl = (value: number) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-export function EfdReceita({ unitId, competencia, allowImport }: { unitId: string; competencia: string; allowImport: boolean }) {
+export function EfdReceita({ unitId, competencia, allowImport, onSaved }: { unitId: string; competencia: string; allowImport: boolean; onSaved?: () => void }) {
   const [rows, setRows] = useState<EfdResumo[]>([]);
   const [preview, setPreview] = useState<{ text: string; resumo: EfdResumo; vendasDiarias: EfdVendaDia[]; filename: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,8 +33,9 @@ export function EfdReceita({ unitId, competencia, allowImport }: { unitId: strin
       if (!result.ok) throw new Error(result.error);
       const refreshed = await listEfd(unitId, competencia);
       setRows(refreshed.rows); setLoadError(refreshed.error ?? "");
-      setMessage(`Receita fiscal de ${result.resumo.competencia} salva. Se necessário, selecione esse mês no filtro acima.`);
+      setMessage(`Receita fiscal de ${result.resumo.competencia} salva e aplicada à Receita.`);
       setPreview(null);
+      onSaved?.();
     } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -46,12 +47,13 @@ export function EfdReceita({ unitId, competencia, allowImport }: { unitId: strin
     {rows.map(row => <p key={row.cnpj}>CNPJ {row.cnpj} · Receita: <strong>{brl(row.receita)}</strong> · PIS: {brl(row.pis)} · COFINS: {brl(row.cofins)}</p>)}
     {allowImport && <>
       <label>Demonstrativo EFD completo (.pdf, até 50 MB)<input aria-label="Selecionar demonstrativo EFD" disabled={busy} type="file" accept=".pdf,application/pdf" onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void read(file); }} style={{ display: "block", margin: "12px 0" }} /></label>
-      {preview && <div>
+      {preview && <div style={{ padding: 16, border: "1px solid var(--brand)", borderRadius: 10, background: "color-mix(in srgb, var(--brand) 7%, transparent)" }}>
+        <p style={{ marginTop: 0, fontWeight: 700 }}>Arquivo lido — confirme abaixo para salvar</p>
         <p>{preview.filename} · {preview.resumo.competencia} · CNPJ {preview.resumo.cnpj}</p>
         <p>Receita: <strong>{brl(preview.resumo.receita)}</strong> · PIS: {brl(preview.resumo.pis)} · COFINS: {brl(preview.resumo.cofins)}</p>
         <p>{preview.vendasDiarias.length} dias com vendas · {preview.vendasDiarias.reduce((sum, d) => sum + d.produtos.length, 0)} produtos/dia identificados.</p>
         <p>Uma nova importação atualiza o resumo deste CNPJ e competência, sem duplicar o total.</p>
-        <button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Salvando…" : "Confirmar importação fiscal"}</button>
+        <button type="button" disabled={busy} onClick={() => void save()} style={{ padding: "10px 16px", border: 0, borderRadius: 8, background: "var(--brand)", color: "#fff", fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>{busy ? "Salvando…" : "Confirmar e mostrar na Receita"}</button>
       </div>}
     </>}
     <p role="status" aria-live="polite">{message}</p>
