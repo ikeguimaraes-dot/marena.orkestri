@@ -1,6 +1,5 @@
 import { fetchAllPaginado as fetchAll } from "@/lib/financeiro/razao/gerar"
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { requireUser } from "@maza/auth/server"
 import { getCurrentUnit } from "@maza/auth/unit"
 import { createSupabaseServerClient } from "@maza/db/supabase/server"
@@ -46,8 +45,8 @@ async function NfeProdutosPage({ searchParams, direcao }: {
   const sp = await searchParams
 
   const now = new Date()
-  const mes = sp.mes ? parseInt(sp.mes, 10) : now.getMonth() + 1
-  const ano = sp.ano ? parseInt(sp.ano, 10) : now.getFullYear()
+  const mesSolicitado = sp.mes ? parseInt(sp.mes, 10) : now.getMonth() + 1
+  const anoSolicitado = sp.ano ? parseInt(sp.ano, 10) : now.getFullYear()
   const q   = sp.q?.trim() ?? ""
 
   const unit = await getCurrentUnit()
@@ -61,18 +60,38 @@ async function NfeProdutosPage({ searchParams, direcao }: {
   const uq = (qb: any) => unitId ? qb.eq("unit_id", unitId) : qb
 
 
-  // Available months for this direction only.
-  const mesesData = await fetchAll<{ mes_lancamento: number; ano_lancamento: number }>((from, to) => {
-    let query = uq(db.from("produtos_relatorio")
-      .select("id,mes_lancamento,ano_lancamento"))
+  // Use one row per fiscal document instead of one row per item to build the
+  // month selector. Spreadsheet-only rows are queried separately so legacy
+  // imports remain available without making XML-heavy histories expensive.
+  const documentosMesesPromise = fetchAll<{ id: number; emissao: string }>((from, to) =>
+    uq(db.from("nfe_documentos")
+      .select("id,emissao")
+      .eq("direcao", direcao)
+      .eq("cancelada", false)
       .order("id")
-    query = direcao === "entrada"
-      ? query.or("direcao_nfe.eq.entrada,direcao_nfe.is.null")
-      : query.eq("direcao_nfe", "saida")
-    return query.range(from, to)
-  })
+      .range(from, to))
+  )
+  const planilhaMesesPromise = direcao === "entrada"
+    ? fetchAll<{ id: number; mes_lancamento: number; ano_lancamento: number }>((from, to) =>
+      uq(db.from("produtos_relatorio")
+        .select("id,mes_lancamento,ano_lancamento")
+        .is("chave_nfe", null)
+        .order("id")
+        .range(from, to))
+    )
+    : []
+  const [documentosMeses, planilhaMeses] = await Promise.all([
+    documentosMesesPromise,
+    planilhaMesesPromise,
+  ])
   const mesesMap = new Map<string, { mes: number; ano: number }>()
-  for (const row of mesesData ?? []) {
+  for (const row of documentosMeses) {
+    const data = new Date(row.emissao)
+    if (Number.isNaN(data.getTime())) continue
+    const item = { mes: data.getUTCMonth() + 1, ano: data.getUTCFullYear() }
+    mesesMap.set(`${item.ano}-${item.mes}`, item)
+  }
+  for (const row of planilhaMeses) {
     const item = { mes: Number(row.mes_lancamento), ano: Number(row.ano_lancamento) }
     mesesMap.set(`${item.ano}-${item.mes}`, item)
   }
@@ -80,20 +99,22 @@ async function NfeProdutosPage({ searchParams, direcao }: {
     a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes
   )
 
-  const mesDisponivel = meses.some(m => m.mes === mes && m.ano === ano)
-  if (!mesDisponivel && meses.length > 0) {
-    const ultimo = meses[meses.length - 1]!
-    const params = new URLSearchParams()
-    params.set("mes", String(ultimo.mes))
-    params.set("ano", String(ultimo.ano))
-    if (q) params.set("q", q)
-    const pathname = direcao === "entrada" ? "/financeiro/dre/cmv" : "/financeiro/dre/nfe-saida"
-    redirect(`${pathname}?${params.toString()}`)
-  }
+  const mesDisponivel = meses.some(m => m.mes === mesSolicitado && m.ano === anoSolicitado)
+  const periodo = mesDisponivel
+    ? { mes: mesSolicitado, ano: anoSolicitado }
+    : meses.at(-1) ?? { mes: mesSolicitado, ano: anoSolicitado }
+  const { mes, ano } = periodo
 
 
   const baseProdutosQuery = () => {
-    const query = uq(db.from("produtos_relatorio").select("*"))
+    const query = uq(db.from("produtos_relatorio").select([
+      "id", "unit_id", "chave_nfe", "fornecedor_nome", "nr_danfe",
+      "v_total_danfe", "dt_emissao", "item_codigo", "item_descricao",
+      "unidade_medida", "tipo_item", "q_embalagem", "q_estoque",
+      "v_embalagem", "v_total_embalagem", "v_custo_medio", "v_custo_compra",
+      "v_custo_total", "perc_variacao", "calcula_cmv", "fornecedor_codigo",
+      "codigo_gerencial", "desc_gerencial", "mes_lancamento", "ano_lancamento",
+    ].join(",")))
       .eq("mes_lancamento", mes)
       .eq("ano_lancamento", ano)
       .order("id")

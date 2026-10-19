@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useMemo, useState } from "react"
+import dynamic from "next/dynamic"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -9,14 +10,18 @@ import { useRouter } from "next/navigation"
 import type { ProdutoRow } from "@/app/financeiro/dre/cmv/page"
 import { getHistoricoProduto, getNotaCompleta } from "@/app/financeiro/dre/cmv/actions"
 import type { HistoricoRow, RankingItem, NotaCompletaResultado, NotaItem } from "@/app/financeiro/dre/cmv/actions"
-import { ImportModal } from "./ImportModal"
-import { NfeImportModal } from "./NfeImportModal"
-import { HistoricoDrawer, RankingTab } from "./RankingTab"
-import { AnaliseTab } from "./AnaliseTab"
-import { ARevisarTab, BonificacaoTab, FornecedorTab } from "./ProdutosExtraTabs"
-import { CatalogoTab } from "./CatalogoTab"
-import { ProdutoTab } from "./ProdutoTab"
 import { calcularCmvCasa } from "@/lib/financeiro/cmv-casa"
+
+const ImportModal = dynamic(() => import("./ImportModal").then(mod => mod.ImportModal))
+const NfeImportModal = dynamic(() => import("./NfeImportModal").then(mod => mod.NfeImportModal))
+const RankingTab = dynamic(() => import("./RankingTab").then(mod => mod.RankingTab))
+const HistoricoDrawer = dynamic(() => import("./RankingTab").then(mod => mod.HistoricoDrawer))
+const AnaliseTab = dynamic(() => import("./AnaliseTab").then(mod => mod.AnaliseTab))
+const ARevisarTab = dynamic(() => import("./ProdutosExtraTabs").then(mod => mod.ARevisarTab))
+const BonificacaoTab = dynamic(() => import("./ProdutosExtraTabs").then(mod => mod.BonificacaoTab))
+const FornecedorTab = dynamic(() => import("./ProdutosExtraTabs").then(mod => mod.FornecedorTab))
+const CatalogoTab = dynamic(() => import("./CatalogoTab").then(mod => mod.CatalogoTab))
+const ProdutoTab = dynamic(() => import("./ProdutoTab").then(mod => mod.ProdutoTab))
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 const fmtBRL = (v: number | null | undefined) =>
@@ -67,7 +72,7 @@ const PAGE_SIZE = 50
 // ── Main component ─────────────────────────────────────────────────────────────
 export function ProdutosClient({ rows, rowsPlanilha, prevRows, mes, ano, meses, unitId, q = "", direcao, totalDocumentos, recebido }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<"tabela" | "ranking" | "cmv" | "analise" | "bonificacao" | "fornecedor" | "arevisar" | "planilha" | "catalogo" | "produto">(direcao === "entrada" ? "analise" : "tabela")
+  const [tab, setTab] = useState<"tabela" | "ranking" | "cmv" | "analise" | "bonificacao" | "fornecedor" | "arevisar" | "planilha" | "catalogo" | "produto">("tabela")
   const [showImport, setShowImport] = useState(false)
   const [showNfeImport, setShowNfeImport] = useState(false)
   const [tableDrawerItem, setTableDrawerItem] = useState<RankingItem | null>(null)
