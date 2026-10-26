@@ -12,7 +12,7 @@ export default function ImportarExtratoDominioPage() {
       <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 20px" }}>
         Envie o PDF &quot;EXTRATO MENSAL&quot; do Domínio. A unidade é resolvida automaticamente
         pelo CNPJ da empresa dentro do PDF (nunca por seleção manual) — CNPJs sem
-        unidade de folha cadastrada em <code>unit_cnpjs</code> são reportados e ignorados,
+        unidade acessível com vínculo ativo no cadastro de empresas são reportados e ignorados,
         sem gravação parcial.
       </p>
       <button

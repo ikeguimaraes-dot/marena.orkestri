@@ -112,7 +112,7 @@ export function DominioImportModal({ onClose, onSuccess }: Props) {
                   </div>
                 ))}
                 {r.cnpjsDesconhecidos.length > 0 && (
-                  <p style={{ fontSize: 12, color: "#f59e0b", marginTop: 6 }}>CNPJ(s) sem unidade de folha cadastrada: {r.cnpjsDesconhecidos.join(", ")}</p>
+                  <p style={{ fontSize: 12, color: "#f59e0b", marginTop: 6 }}>CNPJ(s) sem vínculo ativo com uma unidade acessível: {r.cnpjsDesconhecidos.join(", ")}</p>
                 )}
               </div>
             ))}

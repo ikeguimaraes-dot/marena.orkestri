@@ -149,8 +149,11 @@ async function gravarCompetencia(db: any, unitId: string, comp: DominioCompetenc
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function importarExtratoDominioParaBanco(db: any, resultado: DominioParseResultado): Promise<ImportarExtratoDominioResultado> {
   const cnpjs = [...new Set(resultado.competencias.map((c) => c.cnpj))];
+  // O CNPJ é único em unit_cnpjs; o papel descreve seu uso principal,
+  // não limita os documentos da mesma empresa (folha, compras ou receita).
+  // O vínculo ativo e as políticas RLS continuam definindo a unidade permitida.
   const { data: mapeamentos, error: mapError } = cnpjs.length > 0
-    ? await db.from("unit_cnpjs").select("unit_id,cnpj").eq("papel", "folha").eq("ativo", true).in("cnpj", cnpjs)
+    ? await db.from("unit_cnpjs").select("unit_id,cnpj").eq("ativo", true).in("cnpj", cnpjs)
     : { data: [], error: null };
   if (mapError) throw new Error(mapError.message);
   const unitPorCnpj = new Map<string, string>(
@@ -167,7 +170,7 @@ export async function importarExtratoDominioParaBanco(db: any, resultado: Domini
       competencias.push({
         competencia: comp.competencia, cnpj: comp.cnpj, ok: false, unitId: null,
         colaboradores: 0, linhasProvento: 0, linhasDesconto: 0,
-        error: `CNPJ ${comp.cnpj} não mapeado em unit_cnpjs (papel=folha, ativo=true)`,
+        error: `CNPJ ${comp.cnpj} sem vínculo ativo com uma unidade acessível. Verifique o cadastro da empresa e seu acesso à unidade.`,
       });
       continue;
     }
