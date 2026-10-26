@@ -5,6 +5,7 @@
 // browser, que não existem em runtime serverless (ver erro de produção
 // DOMMatrix em /api/folha/import). Mesma estratégia do NfeImportModal com
 // jszip: parse pesado no cliente, só o resultado estruturado vai pro server.
+import { parseRecibosItems } from "./recibos";
 import { parseDominioItems } from "./parser";
 import type { DominioParseResultado, PositionedText } from "./types";
 
@@ -31,5 +32,7 @@ export async function parseDominioPdf(arquivo: File): Promise<DominioParseResult
     itemsPorPagina.push(items);
   }
 
-  return parseDominioItems(arquivo.name, itemsPorPagina);
+  return itemsPorPagina.some(items => items.some(i => i.text === "Total de Vencimentos"))
+    ? parseRecibosItems(arquivo.name, itemsPorPagina)
+    : parseDominioItems(arquivo.name, itemsPorPagina);
 }

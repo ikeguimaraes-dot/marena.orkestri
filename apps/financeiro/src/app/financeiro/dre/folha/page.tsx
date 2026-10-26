@@ -234,13 +234,13 @@ function FolhaDominio() {
             ))}
           </select>
 
-          {/* Importar extrato Domínio — fonte oficial da folha */}
+          {/* Importar PDFs da folha — fonte oficial da folha */}
           <button
             type="button"
             onClick={() => setDominioModalAberto(true)}
             className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--border-active)] bg-[var(--brand-soft)] text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-colors"
           >
-            Importar extrato Domínio
+            Importar PDFs da folha
           </button>
         </div>
       </div>
