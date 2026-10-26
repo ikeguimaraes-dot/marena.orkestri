@@ -37,7 +37,7 @@ export async function refreshUnits(db: SupabaseClient, unitIds: string[]): Promi
     for (const month of [...months].sort()) {
       if (current.get(month) === revision) continue;
       const result = await gerarRazao(db, unitId, month);
-      if (!result.ok) throw new Error(`Fonte salva, mas os indicadores de ${month.slice(0, 7)} precisam ser recalculados: ${result.snapshot.error ?? result.receita.error ?? result.titulos.error ?? "falha no processamento"}`);
+      if (!result.ok) throw new Error(`Fonte salva, mas os indicadores de ${month.slice(0, 7)} precisam ser recalculados: ${result.nfeEntrada.error ?? result.titulos.error ?? result.folha.error ?? result.receita.error ?? result.snapshot.error ?? "falha no processamento"}`);
     }
   }
 }

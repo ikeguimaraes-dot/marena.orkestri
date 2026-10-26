@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadTs } from './helpers/load-ts.mjs';
 
-function setup(mapping, error = null) {
+function setup(mapping, error = null, failures = {}) {
   const writes = [];
   const filters = [];
+  const refreshes = [];
   const { importarExtratoDominioParaBanco } = loadTs('src/lib/folha/dominio/importar.ts', {
-    '@/lib/financeiro/db/atomic': { applyBatch: async (_db, operations) => writes.push(operations) },
+    '@/lib/financeiro/razao/refresh': { refreshUnits: async (_db, units) => { refreshes.push(units); if (failures.refresh) throw new Error('recálculo falhou'); } },
+    '@/lib/financeiro/db/atomic': { applyBatch: async (_db, operations, options) => { assert.equal(options.refresh, false); if (failures.write) throw new Error("gravação falhou"); writes.push(operations); } },
   });
   const query = {
     select() { return this; },
@@ -21,7 +23,7 @@ function setup(mapping, error = null) {
     cnpj: '55631066000171', competencia: '2026-06', codEmpresaDominio: '',
     colaboradores: [], linhasProvento: [], linhasDesconto: [], resumoRubricas: [],
   }] };
-  return { run: () => importarExtratoDominioParaBanco(db, resultado), writes, filters };
+  return { run: () => importarExtratoDominioParaBanco(db, resultado), writes, filters, refreshes };
 }
 
 for (const papel of ['faturamento', 'compras', 'folha']) {
@@ -52,4 +54,24 @@ test('erro na consulta impede gravação', async () => {
   const s = setup([], { message: 'Falha na consulta' });
   await assert.rejects(s.run, /Falha na consulta/);
   assert.equal(s.writes.length, 0);
+});
+
+const mapping = [{ cnpj: '55631066000171', unit_id: 'marena', papel: 'folha', ativo: true }];
+test('folha salva continua sendo sucesso quando o recálculo falha', async () => {
+  const s = setup(mapping, null, { refresh: true });
+  const result = await s.run();
+  assert.equal(s.writes.length, 1);
+  assert.equal(s.refreshes.length, 1);
+  assert.equal(result.ok, true);
+  assert.equal(result.competencias[0].ok, true);
+  assert.match(result.competencias[0].aviso, /Folha salva/);
+  assert.equal(result.competencias[0].error, undefined);
+});
+test('falha de gravação não é confundida com aviso de recálculo', async () => {
+  const s = setup(mapping, null, { write: true });
+  const result = await s.run();
+  assert.equal(result.ok, false);
+  assert.equal(s.refreshes.length, 0);
+  assert.match(result.competencias[0].error, /Não foi possível salvar/);
+  assert.equal(result.competencias[0].aviso, undefined);
 });

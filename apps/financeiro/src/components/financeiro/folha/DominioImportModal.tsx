@@ -109,6 +109,7 @@ export function DominioImportModal({ onClose, onSuccess }: Props) {
                 {r.competencias.map((c) => (
                   <div key={`${c.cnpj}:${c.competencia}`} style={{ fontSize: 12, color: c.ok ? "#22c55e" : "#ef4444", marginBottom: 4 }}>
                     {c.competencia} ({c.cnpj}): {c.ok ? `OK — ${c.colaboradores} colaboradores, ${c.linhasProvento} proventos, ${c.linhasDesconto} descontos` : c.error}
+                    {c.aviso && <p role="status" style={{ color: "var(--text-2)", marginTop: 6 }}>{c.aviso}</p>}
                   </div>
                 ))}
                 {r.cnpjsDesconhecidos.length > 0 && (

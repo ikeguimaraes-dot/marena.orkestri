@@ -1,3 +1,4 @@
+import { refreshUnits } from "@/lib/financeiro/razao/refresh";
 import { applyBatch, type Mutation } from "@/lib/financeiro/db/atomic";
 // Grava um DominioParseResultado (já validado pelo parser puro) nas tabelas
 // payroll_extrato_dominio_*. Recebe `db` como parâmetro (em vez de importar
@@ -17,6 +18,7 @@ export type ImportarCompetenciaResultado = {
   linhasProvento: number;
   linhasDesconto: number;
   error?: string;
+  aviso?: string;
 };
 
 export type ImportarExtratoDominioResultado = {
@@ -143,7 +145,7 @@ async function gravarCompetencia(db: any, unitId: string, comp: DominioCompetenc
     }));
     operations.push({ table: "payroll_extrato_dominio_rubrica", operation: "insert", rows: rubricaRows });
   }
-  await applyBatch(db, operations);
+  await applyBatch(db, operations, { refresh: false });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,13 +187,33 @@ export async function importarExtratoDominioParaBanco(db: any, resultado: Domini
       continue;
     }
 
-    await gravarCompetencia(db, unitId, comp, resultado.arquivoOrigem);
+    try {
+      await gravarCompetencia(db, unitId, comp, resultado.arquivoOrigem);
+    } catch (error) {
+      console.error("Falha ao gravar folha", { unitId, competencia: comp.competencia, error });
+      competencias.push({ competencia: comp.competencia, cnpj: comp.cnpj, ok: false, unitId,
+        colaboradores: 0, linhasProvento: 0, linhasDesconto: 0,
+        error: "Não foi possível salvar esta competência. Os dados anteriores foram preservados. Tente novamente." });
+      continue;
+    }
     competencias.push({
       competencia: comp.competencia, cnpj: comp.cnpj, ok: true, unitId,
       colaboradores: comp.colaboradores.length,
       linhasProvento: comp.linhasProvento.length,
       linhasDesconto: comp.linhasDesconto.length,
     });
+  }
+
+  // A transação da folha já terminou. Falha de projeção não desfaz a importação.
+  for (const unitId of new Set(competencias.filter(c => c.ok).map(c => c.unitId!))) {
+    try {
+      await refreshUnits(db, [unitId]);
+    } catch (error) {
+      console.error("Folha salva; recálculo pendente", { unitId, error });
+      for (const comp of competencias.filter(c => c.ok && c.unitId === unitId)) {
+        comp.aviso = "Folha salva. Os indicadores da DRE aguardam recálculo. Use Recalcular indicadores na tela da folha; não é necessário reenviar o PDF.";
+      }
+    }
   }
 
   return {

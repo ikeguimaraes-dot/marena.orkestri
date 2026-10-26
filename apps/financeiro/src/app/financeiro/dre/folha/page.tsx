@@ -11,6 +11,7 @@ import { DominioImportModal } from "@/components/financeiro/folha/DominioImportM
 import { FolhaEmpresa } from "@/components/financeiro/folha/FolhaEmpresa"
 import { ResumoFolha } from "@/components/financeiro/folha/ResumoFolha"
 import { ComparacaoFolha } from "@/components/financeiro/folha/ComparacaoFolha"
+import { recalcularIndicadoresFolha } from "@/app/financeiro/folha/dominio/actions"
 import { mesAnterior } from "@/lib/folha/comparacao"
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
@@ -148,6 +149,8 @@ function FolhaDominio() {
   const [buscaColab, setBuscaColab] = useState("")
   const [sortColab, setSortColab] = useState<"nome" | "custo">("custo")
   const [dominioModalAberto, setDominioModalAberto] = useState(false)
+  const [recalculando, setRecalculando] = useState(false)
+  const [mensagemRecalculo, setMensagemRecalculo] = useState("")
   const [reloadKey, setReloadKey] = useState(0)
   const monthsRequestRef = useRef(0)
 
@@ -234,6 +237,20 @@ function FolhaDominio() {
             ))}
           </select>
 
+          <button type="button" disabled={recalculando || !unitId}
+            className="px-3 py-1.5 text-xs rounded-lg border border-[var(--border)] disabled:opacity-50"
+            onClick={async () => {
+              if (!unitId) return
+              setRecalculando(true)
+              setMensagemRecalculo("")
+              try {
+                const result = await recalcularIndicadoresFolha(unitId)
+                setMensagemRecalculo(result.mensagem)
+                if (result.ok) setReloadKey(k => k + 1)
+              } catch {
+                setMensagemRecalculo("Não foi possível confirmar o recálculo. A folha salva permanece disponível; tente novamente.")
+              } finally { setRecalculando(false) }
+            }}>{recalculando ? "Recalculando…" : "Recalcular indicadores"}</button>
           {/* Importar PDFs da folha — fonte oficial da folha */}
           <button
             type="button"
@@ -244,6 +261,8 @@ function FolhaDominio() {
           </button>
         </div>
       </div>
+
+      {mensagemRecalculo && <p role="status" className="px-6 py-3 text-sm text-[var(--text-2)]">{mensagemRecalculo}</p>}
 
       {/* ── Loading / Error ──────────────────────────────────────────────── */}
       {loading && (
