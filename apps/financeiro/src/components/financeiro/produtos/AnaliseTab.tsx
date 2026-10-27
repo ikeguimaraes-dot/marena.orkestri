@@ -66,9 +66,24 @@ export function AnaliseTab({ unitId, mes, ano, onSelecionarNota }: Props) {
     if (selId) detalheRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }, [selId])
 
-  const { data: produtos, loading } = useResource(String(unitId), () => getEvolucaoPorCompra(unitId), null)
+  const { data: produtos, loading, error, reload } = useResource(String(unitId), () => getEvolucaoPorCompra(unitId), null)
 
-  const lista = useMemo(() => produtos ?? [], [produtos])
+  const lista = useMemo(() => (produtos ?? []).flatMap(p => {
+    const compras = p.compras.filter(c => {
+      if (!c.data) return false
+      const parts = competenciaFormatter.formatToParts(new Date(c.data))
+      const periodo = Number(parts.find(x => x.type === "year")?.value) * 12 + Number(parts.find(x => x.type === "month")?.value)
+      return periodo <= ano * 12 + mes
+    })
+    if (!compras.some(c => pertenceACompetencia(c.data, mes, ano))) return []
+    const ultima = compras.at(-1)!
+    const precos = compras.flatMap(c => c.custoUnitario == null ? [] : [c.custoUnitario])
+    if (!precos.length) return []
+    return [{ ...p, compras, totalCompras: compras.length, precoAtual: ultima.custoUnitario,
+      ultimaVarPct: ultima.varPct, ultimaVarAbs: ultima.varAbs,
+      precoMinimo: Math.min(...precos), precoMaximo: Math.max(...precos),
+      precoMedio: precos.reduce((sum, v) => sum + v, 0) / precos.length }]
+  }), [produtos, mes, ano])
 
   // ── KPIs e blocos de destaque (independem de busca/ordenação/seleção) ──────
   const maioresAltas = useMemo(() => lista
@@ -144,12 +159,17 @@ export function AnaliseTab({ unitId, mes, ano, onSelecionarNota }: Props) {
     )
   }
 
+  if (error) return <div role="alert" style={{ padding: 24 }}>
+    <p>Não foi possível carregar a análise das compras.</p>
+    <button type="button" onClick={reload}>Tentar novamente</button>
+  </div>
+
   if (lista.length === 0) {
     return (
       <div style={{ padding: "48px 24px", textAlign: "center",
         background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: 14 }}>
         <p style={{ fontSize: 14, color: "var(--text-3)", margin: 0 }}>
-          Nenhum produto do catálogo com duas ou mais compras por XML.
+          Nenhum produto com compras neste mês e histórico vinculado ao catálogo.
         </p>
         <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 8 }}>
           Gere o catálogo e vincule os produtos na aba Catálogo para ver a evolução de preço.
@@ -164,7 +184,7 @@ export function AnaliseTab({ unitId, mes, ano, onSelecionarNota }: Props) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%, 300px),1fr))", gap: 12 }}>
         <TopoCard title="Maiores altas do mês" icon="▲" cor="#EF4444"
           itens={maioresAltas} selId={selId} onSelect={setSelId} vazio="Nenhum produto subiu de preço na última compra." />
-        <TopoCard title="Maiores quedas" icon="▼" cor="#22C55E"
+        <TopoCard title="Maiores quedas do mês" icon="▼" cor="#22C55E"
           itens={maioresQuedas} selId={selId} onSelect={setSelId} vazio="Nenhum produto caiu de preço na última compra." />
         <KpiCard kpis={kpis} />
       </div>

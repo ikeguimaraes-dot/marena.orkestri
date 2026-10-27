@@ -1806,7 +1806,7 @@ export async function getEvolucaoPorCompra(unitId: string | null): Promise<Produ
         .select("fornecedor_codigo,fornecedor_nome,item_codigo,dt_emissao,nr_danfe,chave_nfe,v_custo_compra,q_embalagem,v_total_danfe")
         .eq("direcao_nfe", "entrada")
         .not("chave_nfe", "is", null)
-        .order("dt_emissao", { ascending: true })
+        .order("dt_emissao", { ascending: true }).order("id")
         .range(from, to)
       if (unitId) q = q.eq("unit_id", unitId)
       return q
@@ -1828,15 +1828,15 @@ export async function getEvolucaoPorCompra(unitId: string | null): Promise<Produ
     if (compras.length === 0) return []
 
     const cnpjs = [...new Set(compras.map(r => r.fornecedor_codigo!))]
-    const itemCodigos = [...new Set(compras.map(r => r.item_codigo!))]
-
-    const deparaRows = await fetchAllPaginado((from, to) =>
-      db.from("produtos_depara")
-        .select("fornecedor_cnpj,item_codigo,produto_id")
-        .in("fornecedor_cnpj", cnpjs)
-        .in("item_codigo", itemCodigos)
-        .range(from, to)
-    ) as Array<{ fornecedor_cnpj: string; item_codigo: string; produto_id: string | null }>
+    const deparaRows: Array<{ fornecedor_cnpj: string; item_codigo: string; produto_id: string | null }> = []
+    // URLs curtas: milhares de códigos em .in() excedem limites do proxy.
+    for (let i = 0; i < cnpjs.length; i += 50) {
+      deparaRows.push(...await fetchAllPaginado((from, to) =>
+        db.from("produtos_depara").select("fornecedor_cnpj,item_codigo,produto_id")
+          .in("fornecedor_cnpj", cnpjs.slice(i, i + 50))
+          .order("fornecedor_cnpj").order("item_codigo").range(from, to)
+      ) as Array<{ fornecedor_cnpj: string; item_codigo: string; produto_id: string | null }>)
+    }
 
     const produtoIdPorPar = new Map<string, string>()
     for (const d of deparaRows) {
@@ -1845,12 +1845,13 @@ export async function getEvolucaoPorCompra(unitId: string | null): Promise<Produ
     const produtoIds = [...new Set(produtoIdPorPar.values())]
     if (produtoIds.length === 0) return []
 
-    const catalogoRows = await fetchAllPaginado((from, to) =>
-      db.from("produtos_catalogo")
-        .select("id,codigo,nome,ncm,unidade_padrao")
-        .in("id", produtoIds)
-        .range(from, to)
-    ) as Array<{ id: string; codigo: string; nome: string; ncm: string | null; unidade_padrao: string | null }>
+    const catalogoRows: Array<{ id: string; codigo: string; nome: string; ncm: string | null; unidade_padrao: string | null }> = []
+    for (let i = 0; i < produtoIds.length; i += 100) {
+      catalogoRows.push(...await fetchAllPaginado((from, to) =>
+        db.from("produtos_catalogo").select("id,codigo,nome,ncm,unidade_padrao")
+          .in("id", produtoIds.slice(i, i + 100)).order("id").range(from, to)
+      ) as typeof catalogoRows)
+    }
     const catalogoPorId = new Map(catalogoRows.map(c => [c.id, c]))
 
     const comprasPorProduto = new Map<string, LinhaCompraBruta[]>()
@@ -1917,8 +1918,9 @@ export async function getEvolucaoPorCompra(unitId: string | null): Promise<Produ
     }
 
     return resultado
-  } catch {
-    return []
+  } catch (error) {
+    console.error("[nfe-analise] Falha ao carregar evolução de compras", error)
+    throw new Error("Não foi possível carregar a análise das compras. Tente novamente.")
   }
 }
 
