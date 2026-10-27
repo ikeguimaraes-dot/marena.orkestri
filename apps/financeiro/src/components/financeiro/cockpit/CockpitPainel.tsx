@@ -1,4 +1,5 @@
 "use client";
+import type { FaturamentoMes } from "./faturamento";
 
 import Link from "next/link";
 import { ArrowDownLeft, ArrowUpRight, Minus, ChartNoAxesCombined, ReceiptText, Users, Utensils, Wallet, Percent, Layers, Landmark } from "lucide-react";
@@ -15,11 +16,11 @@ import type { DespesaResumo } from "./despesa";
 export type CockpitProps = {
   unidade: string; competencia: string; janela: string[]; kpiRows: KpiSnapshotRow[];
   metas: MetaRow[]; dreRows: DreSnapshotRow[]; planoContas: PlanoContaRow[]; fontes?: FonteSaudeRow[];
-  despesa: DespesaResumo;
+  despesa: DespesaResumo; faturamento?: Record<string, FaturamentoMes>;
 };
 
 const CARDS = [
-  { key: "receita_liquida", label: "Receita líquida", icon: Wallet, format: formatBRLCompact, tone: "orange" },
+  { key: "receita_liquida", label: "Faturamento", icon: Wallet, format: formatBRLCompact, tone: "orange" },
   { key: "resultado_liquido", label: "Resultado líquido", icon: ChartNoAxesCombined, format: formatBRLCompact, tone: "lime" },
   { key: "prime_cost_pct", label: "Prime cost", icon: Layers, format: (v: number) => formatPct(v * 100), tone: "default" },
   { key: "ebitda_pct", label: "Margem EBITDA", icon: Percent, format: (v: number) => formatPct(v * 100), tone: "default" },
@@ -30,7 +31,7 @@ const CARDS = [
   { key: "ticket_medio", label: "Ticket médio", icon: ReceiptText, format: formatBRL, tone: "compact" },
 ] as const;
 
-export function CockpitPainel({ unidade, competencia, janela, kpiRows, metas, dreRows, planoContas, fontes, despesa }: CockpitProps) {
+export function CockpitPainel({ unidade, competencia, janela, kpiRows, metas, dreRows, planoContas, fontes, despesa, faturamento }: CockpitProps) {
   const rows = agruparPorCompetencia(kpiRows, janela, unidade);
   const current = rows.get(competencia) ?? null;
   const previousMonth = janela[janela.indexOf(competencia) - 1];
@@ -40,11 +41,16 @@ export function CockpitPainel({ unidade, competencia, janela, kpiRows, metas, dr
   if (!current) return <CockpitEmpty />;
 
   const card = (definition: typeof CARDS[number]) => {
-    const presentation = metricPresentation(current, definition.key);
-    const before = metricPresentation(previous, definition.key);
+    const revenue = (month: string | undefined) => {
+      const item = month ? faturamento?.[month] : undefined;
+      return { value: item?.valor ?? null, missing: item?.valor == null ? "Sem receita no período" : undefined, partial: undefined };
+    };
+    const directRevenue = definition.key === "receita_liquida" && faturamento != null;
+    const presentation = directRevenue ? revenue(competencia) : metricPresentation(current, definition.key);
+    const before = directRevenue ? revenue(previousMonth) : metricPresentation(previous, definition.key);
     const delta = metricDelta(definition.key, presentation.value, before.value, !presentation.partial && !before.partial);
-    const series = janela.map((month) => metricPresentation(rows.get(month), definition.key).value);
-    return <MetricCard key={definition.key} definition={definition} presentation={presentation} delta={delta} series={series} meta={metasPorChave.get(definition.key)} />;
+    const series = janela.map((month) => directRevenue ? revenue(month).value : metricPresentation(rows.get(month), definition.key).value);
+    return <MetricCard note={directRevenue ? faturamento?.[competencia]?.criterio : undefined} key={definition.key} definition={definition} presentation={presentation} delta={delta} series={series} meta={metasPorChave.get(definition.key)} />;
   };
   const unclassified = dreRows.filter((row) => row.conta_codigo === "9.99" && (unidade === "consolidado" || row.unit_id === unidade)).reduce((sum, row) => sum + Number(row.valor), 0);
 
@@ -73,7 +79,8 @@ export function CockpitEmpty() {
   return <section className="maza-panel maza-empty maza-enter"><ChartNoAxesCombined size={32} /><h2>Seu próximo resultado começa aqui.</h2><p>Ainda não há resultados disponíveis para esta unidade e período. Confira as importações ou escolha outra competência.</p><Link href="/financeiro/importacao-maza" className="maza-button maza-button-primary">Conferir importações <ArrowUpRight size={16} /></Link></section>;
 }
 
-function MetricCard({ definition, presentation, delta, series, meta }: {
+function MetricCard({ definition, presentation, delta, series, meta, note }: {
+  note?: string;
   definition: typeof CARDS[number]; presentation: ReturnType<typeof metricPresentation>; delta: ReturnType<typeof metricDelta>; series: Array<number | null>; meta?: MetaRow;
 }) {
   const Icon = definition.icon;
@@ -82,6 +89,7 @@ function MetricCard({ definition, presentation, delta, series, meta }: {
   return <article className={`maza-enter ${styles.metric}`} data-tone={definition.tone}>
     <div className={styles.metricHeading}><span>{definition.label}</span><span className={styles.metricIcon}><Icon size={16} strokeWidth={1.7} /></span></div>
     <div className={styles.metricValue}>{presentation.value == null ? "—" : definition.format(presentation.value)}</div>
+    {note && <p className={styles.metricNote}>{note}</p>}
     {definition.key === "cmv_empresa_pct" && <p className={styles.metricNote}>(Mercadorias compradas + mão de obra) ÷ faturamento bruto</p>}
     {presentation.missing && <p className={styles.metricNote}>{presentation.missing}</p>}
     {presentation.partial && <p className={styles.partial}>{presentation.partial}</p>}
