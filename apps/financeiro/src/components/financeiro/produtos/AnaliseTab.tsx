@@ -57,6 +57,7 @@ function pertenceACompetencia(data: string | null, mes: number, ano: number) {
 export function AnaliseTab({ unitId, mes, ano, onSelecionarNota }: Props) {
   const [busca, setBusca]       = useState("")
   const [sortMode, setSort]     = useState<SortMode>("variacao")
+  const [limite, setLimite] = useState(50)
   const [selId, setSelId]       = useState<string | null>(null)
   const detalheRef = useRef<HTMLDivElement>(null)
 
@@ -189,6 +190,10 @@ export function AnaliseTab({ unitId, mes, ano, onSelecionarNota }: Props) {
         <KpiCard kpis={kpis} />
       </div>
 
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <span>Exibindo {Math.min(limite, listaFiltrada.length)} de {listaFiltrada.length} produtos</span>
+        {limite < listaFiltrada.length && <button type="button" onClick={() => setLimite(v => v + 50)}>Mostrar mais 50</button>}
+      </div>
       {/* ── Painéis: lista + detalhe ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))", gap: 16, alignItems: "start" }}>
         {/* Lista lateral (busca + ordenação rápida) */}
@@ -220,7 +225,7 @@ export function AnaliseTab({ unitId, mes, ano, onSelecionarNota }: Props) {
           </div>
 
           <div style={{ maxHeight: 620, overflowY: "auto" }}>
-            {listaFiltrada.map(p => {
+            {listaFiltrada.slice(0, limite).map(p => {
               const active = p.produtoId === selId
               return (
                 <button key={p.produtoId} onClick={() => setSelId(p.produtoId)} style={{
@@ -264,7 +269,7 @@ export function AnaliseTab({ unitId, mes, ano, onSelecionarNota }: Props) {
 
         {/* Tabela completa + Detalhe do selecionado */}
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-          <ListaTabela produtos={listaFiltrada} selId={selId} onSelect={setSelId} />
+          <ListaTabela produtos={listaFiltrada.slice(0, limite)} selId={selId} onSelect={setSelId} />
           <div ref={detalheRef}>
             {selecionado ? (
               <Detalhe p={selecionado} onSelecionarNota={onSelecionarNota} />

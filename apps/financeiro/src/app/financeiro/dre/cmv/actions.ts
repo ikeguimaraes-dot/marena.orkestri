@@ -362,24 +362,9 @@ export async function getProdutosMeses(
     if (!supabase) return []
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = supabase as any
-    const { data } = await db
-      .from("produtos_relatorio")
-      .select("mes_lancamento, ano_lancamento")
-      .eq("unit_id", unitId)
-      .not("chave_nfe", "is", null)
-      .limit(10000)
-    if (!data) return []
-    const map = new Map<string, number>()
-    for (const r of data) {
-      const k = `${r.ano_lancamento}-${r.mes_lancamento}`
-      map.set(k, (map.get(k) ?? 0) + 1)
-    }
-    return [...map.entries()]
-      .map(([k, total]) => {
-        const [ano, mes] = k.split("-").map(Number)
-        return { mes: mes!, ano: ano!, total }
-      })
-      .sort((a, b) => a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes)
+    const { data, error } = await db.rpc("financeiro_meses_produtos", { p_unit: unitId })
+    if (error) throw new Error(error.message)
+    return (data ?? []) as Array<{ mes: number; ano: number; total: number }>
   } catch {
     return []
   }
@@ -1161,18 +1146,14 @@ async function getCategoriasConhecidas(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any
 ): Promise<Set<string>> {
-  const data = await fetchAllPaginado((from, to) =>
-    db.from("produtos_relatorio")
-      .select("desc_gerencial")
-      .not("desc_gerencial", "is", null)
-      .range(from, to)
-  )
+  const { data, error } = await db.rpc("financeiro_categorias_produtos")
+  if (error) throw new Error(error.message)
   const contagem = new Map<string, number>()
-  for (const row of data as Array<{ desc_gerencial: string }>) {
+  for (const row of (data ?? []) as Array<{ desc_gerencial: string; quantidade: number }>) {
     const v = row.desc_gerencial.trim().replace(/-+$/, "").trim().toUpperCase()
     if (v.length === 0 || v.length > CATEGORIA_PREFIXO_MAX_LEN) continue
     if (/[-*()0-9]/.test(v)) continue
-    contagem.set(v, (contagem.get(v) ?? 0) + 1)
+    contagem.set(v, (contagem.get(v) ?? 0) + Number(row.quantidade))
   }
   const set = new Set<string>()
   for (const [v, n] of contagem) if (n >= CATEGORIA_MIN_OCORRENCIAS) set.add(v)
@@ -1801,58 +1782,14 @@ export async function getEvolucaoPorCompra(unitId: string | null): Promise<Produ
   try {
     const db = await getProdutosDb()
 
-    const linhas = await fetchAllPaginado((from, to) => {
-      let q = db.from("produtos_relatorio")
-        .select("fornecedor_codigo,fornecedor_nome,item_codigo,dt_emissao,nr_danfe,chave_nfe,v_custo_compra,q_embalagem,v_total_danfe")
-        .eq("direcao_nfe", "entrada")
-        .not("chave_nfe", "is", null)
-        .order("dt_emissao", { ascending: true }).order("id")
-        .range(from, to)
-      if (unitId) q = q.eq("unit_id", unitId)
-      return q
-    }) as LinhaCompraBruta[]
-
-    // Bonificação (item de brinde/promocional) não é compra real: v_total_danfe 0 ou 0.01.
-    const validas = linhas.filter(r =>
-      r.fornecedor_codigo && r.item_codigo &&
-      r.v_total_danfe !== 0 && r.v_total_danfe !== 0.01
-    )
-
-    // Uma nota = uma compra: um ponto por (chave_nfe, item_codigo).
-    const porChaveItem = new Map<string, LinhaCompraBruta>()
-    for (const r of validas) {
-      const chave = `${r.chave_nfe}|${r.item_codigo}`
-      if (!porChaveItem.has(chave)) porChaveItem.set(chave, r)
+    const { data, error } = await db.rpc("financeiro_evolucao_compras", { p_unit: unitId })
+    if (error) throw new Error(error.message)
+    const { compras, catalogo } = data as {
+      compras: Array<LinhaCompraBruta & { produto_id: string }>
+      catalogo: Array<{ id: string; codigo: string; nome: string; ncm: string | null; unidade_padrao: string | null }>
     }
-    const compras = [...porChaveItem.values()]
-    if (compras.length === 0) return []
-
-    const cnpjs = [...new Set(compras.map(r => r.fornecedor_codigo!))]
-    const deparaRows: Array<{ fornecedor_cnpj: string; item_codigo: string; produto_id: string | null }> = []
-    // URLs curtas: milhares de códigos em .in() excedem limites do proxy.
-    for (let i = 0; i < cnpjs.length; i += 50) {
-      deparaRows.push(...await fetchAllPaginado((from, to) =>
-        db.from("produtos_depara").select("fornecedor_cnpj,item_codigo,produto_id")
-          .in("fornecedor_cnpj", cnpjs.slice(i, i + 50))
-          .order("fornecedor_cnpj").order("item_codigo").range(from, to)
-      ) as Array<{ fornecedor_cnpj: string; item_codigo: string; produto_id: string | null }>)
-    }
-
-    const produtoIdPorPar = new Map<string, string>()
-    for (const d of deparaRows) {
-      if (d.produto_id) produtoIdPorPar.set(`${d.fornecedor_cnpj}|${d.item_codigo}`, d.produto_id)
-    }
-    const produtoIds = [...new Set(produtoIdPorPar.values())]
-    if (produtoIds.length === 0) return []
-
-    const catalogoRows: Array<{ id: string; codigo: string; nome: string; ncm: string | null; unidade_padrao: string | null }> = []
-    for (let i = 0; i < produtoIds.length; i += 100) {
-      catalogoRows.push(...await fetchAllPaginado((from, to) =>
-        db.from("produtos_catalogo").select("id,codigo,nome,ncm,unidade_padrao")
-          .in("id", produtoIds.slice(i, i + 100)).order("id").range(from, to)
-      ) as typeof catalogoRows)
-    }
-    const catalogoPorId = new Map(catalogoRows.map(c => [c.id, c]))
+    const produtoIdPorPar = new Map(compras.map(r => [`${r.fornecedor_codigo}|${r.item_codigo}`, r.produto_id]))
+    const catalogoPorId = new Map(catalogo.map(c => [c.id, c]))
 
     const comprasPorProduto = new Map<string, LinhaCompraBruta[]>()
     for (const r of compras) {
