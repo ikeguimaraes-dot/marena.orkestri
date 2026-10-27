@@ -21,7 +21,7 @@ export async function refreshUnits(db: SupabaseClient, unitIds: string[]): Promi
       fetchAllPaginado((from, to) => db.from("kpi_snapshot").select("competencia,revisao_fonte").eq("unit_id", unitId).range(from, to)),
       fetchAllPaginado((from, to) => db.from("receita_dias").select("data").eq("unit_id", unitId).range(from, to)),
       fetchAllPaginado((from, to) => db.from("titulos_a_pagar").select("d_competencia,d_lancamento,d_vencimento").eq("unit_id", unitId).in("origem", ["nf_pedidos", "contas_pagar"]).range(from, to)),
-      fetchAllPaginado((from, to) => db.from("produtos_relatorio").select("mes_lancamento,ano_lancamento").eq("unit_id", unitId).range(from, to)),
+      fetchAllPaginado((from, to) => db.from("produtos_relatorio").select("mes_lancamento,ano_lancamento").eq("unit_id", unitId).eq("direcao_nfe", "entrada").range(from, to)),
       fetchAllPaginado((from, to) => db.from("payroll_extrato_dominio_competencia").select("competencia").eq("unit_id", unitId).range(from, to)),
       fetchAllPaginado((from, to) => db.from("lancamentos").select("competencia").eq("unit_id", unitId).range(from, to)),
     ]);

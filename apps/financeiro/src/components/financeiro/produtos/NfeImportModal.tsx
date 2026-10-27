@@ -9,7 +9,7 @@ import { parseNfeXml, type NfeDirection, type ParsedNfe } from "@/lib/nfe/parser
 import { splitNfeBatches } from "@/lib/nfe/batches"
 
 type Props = { direction: NfeDirection; onClose: () => void; onSuccess: () => void }
-type Status = "idle" | "reading" | "ready" | "uploading" | "done" | "error"
+type Status = "idle" | "reading" | "ready" | "uploading" | "finalizing" | "done" | "error"
 
 function sourceLabel(files: File[]) {
   if (files.length === 1) return files[0]!.name
@@ -26,6 +26,20 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
   const [error, setError] = useState("")
   const [result, setResult] = useState<NfeImportResult | null>(null)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
+
+  const [pendingFinalization, setPendingFinalization] = useState<string[] | null>(null)
+
+  async function finishImport(unitIds: string[]) {
+    setStatus("finalizing"); setError("")
+    try {
+      const response = await finalizarImportacaoNfe(unitIds)
+      if (!response.ok) throw new Error(response.error)
+      setPendingFinalization(null); setStatus("done")
+    } catch {
+      setError("As notas foram salvas. O recálculo dos indicadores não terminou; clique em Recalcular indicadores para tentar novamente sem reenviar os XMLs.")
+      setStatus("error")
+    }
+  }
 
   async function readFiles(files: File[]) {
     setStatus("reading"); setError(""); setNotes([]); setFileName(sourceLabel(files))
@@ -95,16 +109,20 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       setProgress({ current: i + 1, total: batches.length })
     }
     aggregate.cnpjsDesconhecidos = [...cnpjMap.entries()].map(([cnpj, v]) => ({ cnpj, ...v }))
-    if (aggregate.importadas > 0 || aggregate.itens > 0 || aggregate.canceladas > 0) {
-      await finalizarImportacaoNfe([...affectedUnitIds]);
-    }
-    setResult(aggregate); setStatus("done")
+    setResult(aggregate)
+    // Inclui duplicadas: uma tentativa anterior pode ter salvo todas as notas
+    // e falhado apenas no recálculo, inclusive após recarregar a página.
+    if (affectedUnitIds.size > 0) {
+      const ids = [...affectedUnitIds]
+      setPendingFinalization(ids)
+      await finishImport(ids)
+    } else { setStatus("done") }
     } catch (e) { setError(`Os lotes já gravados foram preservados. ${e instanceof Error ? e.message : String(e)}`); setStatus("error"); }
   }
 
   const active = notes.filter(note => !note.cancelada)
   const total = active.reduce((sum, note) => sum + note.valorTotal, 0)
-  const busy = status === "reading" || status === "uploading"
+  const busy = status === "reading" || status === "uploading" || status === "finalizing"
   const box: React.CSSProperties = { background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:24, width:560, maxWidth:"92vw" }
   const button: React.CSSProperties = { padding:"8px 16px", borderRadius:7, border:"1px solid var(--border)", cursor:"pointer", fontSize:13, fontWeight:600 }
 
@@ -136,6 +154,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
 
       {error && <div style={{ padding:"9px 12px", marginTop:12, borderRadius:7, background:"rgba(239,68,68,.1)", color:"#ef4444", fontSize:12 }}>{error}</div>}
       {status === "uploading" && <p style={{ padding:28, textAlign:"center", color:"var(--text-3)" }}>Salvando notas em lotes… {progress.current}/{progress.total}</p>}
+      {status === "finalizing" && <p style={{ padding:28, textAlign:"center", color:"var(--text-3)" }}>Notas salvas. Atualizando indicadores…</p>}
       {status === "done" && result && <div style={{ padding:"12px 0" }}>
         <h3 style={{ color:"#22c55e", margin:"0 0 8px" }}>Importação concluída</h3>
         <p style={{ fontSize:13, color:"var(--text-2)" }}>{result.importadas} notas novas · {result.itens} itens gravados · {result.duplicadas} notas já existentes · {result.canceladas} canceladas{result.naoImportadas > 0 ? ` · ${result.naoImportadas} não importadas` : ""}</p>
@@ -161,7 +180,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       </div>}
 
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:18 }}>
-        {status === "done" ? <button onClick={() => { onSuccess(); onClose() }} style={{ ...button, background:"var(--brand)", color:"white", border:0 }}>Concluir</button> : <><button disabled={busy} onClick={onClose} style={{ ...button, background:"transparent", color:"var(--text-2)" }}>Cancelar</button>{notes.length > 0 && <button disabled={busy || !direction} onClick={() => void submit()} style={{ ...button, background:direction?"var(--brand)":"var(--surface-2)", color:direction?"white":"var(--text-3)", border:0 }}>Importar NF-e</button>}</>}
+        {status === "done" ? <button onClick={() => { onSuccess(); onClose() }} style={{ ...button, background:"var(--brand)", color:"white", border:0 }}>Concluir</button> : <><button disabled={busy} onClick={onClose} style={{ ...button, background:"transparent", color:"var(--text-2)" }}>Cancelar</button>{notes.length > 0 && <button disabled={busy || !direction} onClick={() => void (pendingFinalization ? finishImport(pendingFinalization) : submit())} style={{ ...button, background:direction?"var(--brand)":"var(--surface-2)", color:direction?"white":"var(--text-3)", border:0 }}>{pendingFinalization ? "Recalcular indicadores" : "Importar NF-e"}</button>}</>}
       </div>
     </div>
   </div>, document.body)

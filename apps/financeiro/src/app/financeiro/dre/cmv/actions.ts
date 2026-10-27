@@ -295,7 +295,10 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
     const chavesDoLote = [...new Set(notasParaProdutos.map(note => note.chave))]
     // O catálogo usa somente compras; saídas não precisam ler todo o de/para.
     const catalogo = payload.direcao === "entrada" && chavesDoLote.length ? await gerarCatalogoAutomatico(chavesDoLote) : null
-    if (!payload.adiarRecalculo) await finalizarImportacaoNfe(targetUnitIds);
+    if (!payload.adiarRecalculo) {
+      const finalizacao = await finalizarImportacaoNfe(targetUnitIds);
+      if (!finalizacao.ok) throw new Error(finalizacao.error);
+    }
 
     return {
       ok: true, importadas: validas.filter(note => !existingKeys.has(`${note.unitId} ${note.chave}`)).length, duplicadas: existingKeys.size, canceladas, itens: itemCount,
@@ -1919,12 +1922,18 @@ export async function getEvolucaoPorCompra(unitId: string | null): Promise<Produ
   }
 }
 
-export async function finalizarImportacaoNfe(unitIds?: string[]): Promise<void> {
-  await requireUser();
-  const db = await createFinanceiroClient();
-  const { data, error } = await db.from("units").select("id");
-  if (error) throw new Error(error.message);
-  const ids = (data ?? []).map(row => row.id).filter(id => !unitIds || unitIds.includes(id));
-  const { refreshUnits } = await import("@/lib/financeiro/razao/refresh");
-  await refreshUnits(db, ids);
+export async function finalizarImportacaoNfe(unitIds?: string[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireUser();
+    const db = await createFinanceiroClient();
+    const { data, error } = await db.from("units").select("id");
+    if (error) throw new Error(error.message);
+    const ids = (data ?? []).map(row => row.id).filter(id => !unitIds || unitIds.includes(id));
+    const { refreshUnits } = await import("@/lib/financeiro/razao/refresh");
+    await refreshUnits(db, ids);
+    return { ok: true };
+  } catch (error) {
+    console.error("[nfe] Falha no recálculo após importação", error);
+    return { ok: false, error: "As notas foram salvas, mas o recálculo dos indicadores não terminou. Tente recalcular novamente." };
+  }
 }
