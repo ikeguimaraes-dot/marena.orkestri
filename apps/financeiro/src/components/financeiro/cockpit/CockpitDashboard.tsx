@@ -1,4 +1,4 @@
-import { faturamentoPorMes, type ReceitaDia, type ReceitaFiscal } from "./faturamento";
+import { faturamentoPorMes, type NotaFaturamento } from "./faturamento";
 import { fetchCockpitRows as fetchAll, snapshotsAreStale } from "./data";
 import { calcularDespesa, type FolhaDespesa, type TituloDespesa } from "./despesa";
 import "server-only";
@@ -85,7 +85,7 @@ async function PainelData({ db, unidadeParam, competenciaParam, unitIdsTodos }: 
   for (let i = JANELA_MESES - 1; i >= 0; i--) janela.push(competenciaShift(competenciaParam, -i));
 
   const proximoMes = competenciaShift(competenciaParam, 1);
-  const [kpiRows, metas, dreRows, planoContas, revisoes, folhaEmpresa, contasPagar, receitasDias, receitasFiscais] = await Promise.all([
+  const [kpiRows, metas, dreRows, planoContas, revisoes, folhaEmpresa, contasPagar, notasSaida] = await Promise.all([
     fetchAll<KpiSnapshotRow & { revisao_fonte: number | null }>((from, to) =>
       db.from("kpi_snapshot").select("*").in("unit_id", unitIds).in("competencia", janela).order("unit_id").order("competencia").range(from, to)),
     // Metas de unidades diferentes não possuem uma regra de consolidação.
@@ -105,12 +105,11 @@ async function PainelData({ db, unidadeParam, competenciaParam, unitIdsTodos }: 
         .in("unit_id", unitIds).eq("origem", "contas_pagar")
         .or(`and(d_competencia.gte.${competenciaParam},d_competencia.lt.${proximoMes}),and(d_competencia.is.null,d_lancamento.gte.${competenciaParam},d_lancamento.lt.${proximoMes}),and(d_competencia.is.null,d_lancamento.is.null,d_vencimento.gte.${competenciaParam},d_vencimento.lt.${proximoMes})`)
         .order("id").range(from, to)),
-    fetchAll<ReceitaDia>((from, to) =>
-      db.from("receita_dias").select("unit_id,data,receita_liquida").in("unit_id", unitIds)
-        .gte("data", janela[0]).lt("data", proximoMes).order("id").range(from, to)),
-    fetchAll<ReceitaFiscal>((from, to) =>
-      db.from("receita_fiscal_efd").select("unit_id,competencia,receita,pis,cofins").in("unit_id", unitIds)
-        .in("competencia", janela.map(m => m.slice(0, 7))).order("unit_id").order("competencia").order("cnpj").range(from, to)),
+    fetchAll<NotaFaturamento>((from, to) =>
+      db.from("nfe_documentos").select("unit_id,emissao,valor_total").in("unit_id", unitIds)
+        .eq("direcao", "saida").eq("cancelada", false)
+        .gte("emissao", `${janela[0]}T00:00:00-03:00`).lt("emissao", `${proximoMes}T00:00:00-03:00`)
+        .order("id").range(from, to)),
   ]);
   const desatualizado = snapshotsAreStale(kpiRows, revisoes);
 
@@ -126,7 +125,7 @@ async function PainelData({ db, unidadeParam, competenciaParam, unitIdsTodos }: 
       metas={metas}
       dreRows={dreRows}
       planoContas={planoContas}
-      faturamento={faturamentoPorMes(unitIds, janela, receitasDias, receitasFiscais)}
+      faturamento={faturamentoPorMes(unitIds, janela, notasSaida)}
       despesa={calcularDespesa(unitIds, competenciaParam, folhaEmpresa, contasPagar)}
     />
     </>

@@ -20,7 +20,7 @@ export type CockpitProps = {
 };
 
 const CARDS = [
-  { key: "receita_liquida", label: "Faturamento", icon: Wallet, format: formatBRLCompact, tone: "orange" },
+  { key: "receita_liquida", label: "Faturamento", icon: Wallet, format: formatBRL, tone: "orange" },
   { key: "resultado_liquido", label: "Resultado líquido", icon: ChartNoAxesCombined, format: formatBRLCompact, tone: "lime" },
   { key: "prime_cost_pct", label: "Prime cost", icon: Layers, format: (v: number) => formatPct(v * 100), tone: "default" },
   { key: "ebitda_pct", label: "Margem EBITDA", icon: Percent, format: (v: number) => formatPct(v * 100), tone: "default" },
@@ -50,7 +50,7 @@ export function CockpitPainel({ unidade, competencia, janela, kpiRows, metas, dr
     const before = directRevenue ? revenue(previousMonth) : metricPresentation(previous, definition.key);
     const delta = metricDelta(definition.key, presentation.value, before.value, !presentation.partial && !before.partial);
     const series = janela.map((month) => directRevenue ? revenue(month).value : metricPresentation(rows.get(month), definition.key).value);
-    return <MetricCard note={directRevenue ? faturamento?.[competencia]?.criterio : undefined} key={definition.key} definition={definition} presentation={presentation} delta={delta} series={series} meta={metasPorChave.get(definition.key)} />;
+    return <MetricCard note={directRevenue ? faturamento?.[competencia]?.criterio : undefined} key={definition.key} definition={definition} presentation={presentation} delta={delta} series={series} meta={directRevenue ? undefined : metasPorChave.get(definition.key)} />;
   };
   const unclassified = dreRows.filter((row) => row.conta_codigo === "9.99" && (unidade === "consolidado" || row.unit_id === unidade)).reduce((sum, row) => sum + Number(row.valor), 0);
 

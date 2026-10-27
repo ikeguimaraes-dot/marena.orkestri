@@ -1,27 +1,19 @@
-export type ReceitaDia = { unit_id: string; data: string; receita_liquida: number | null };
-export type ReceitaFiscal = { unit_id: string; competencia: string; receita: number; pis: number; cofins: number };
+export type NotaFaturamento = { unit_id: string; emissao: string; valor_total: number | null };
 export type FaturamentoMes = { valor: number | null; criterio: string };
+const calendario = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' });
 
-// A EFD é mensal: não somar com dias operacionais da mesma unidade/mês.
-export function faturamentoPorMes(unitIds: string[], janela: string[], dias: ReceitaDia[], fiscal: ReceitaFiscal[]): Record<string, FaturamentoMes> {
-  return Object.fromEntries(janela.map(mes => {
-    let valor = 0;
-    let presentes = 0;
-    const fontes = new Set<string>();
-    for (const unitId of unitIds) {
-      const efd = fiscal.filter(r => r.unit_id === unitId && r.competencia === mes.slice(0, 7));
-      const operacional = dias.filter(r => r.unit_id === unitId && r.data.startsWith(mes.slice(0, 7)));
-      if (efd.length) {
-        valor += efd.reduce((s, r) => s + Number(r.receita) - Number(r.pis) - Number(r.cofins), 0);
-        presentes++;
-        fontes.add('EFD: receita menos PIS e Cofins');
-      } else if (operacional.length && operacional.every(r => r.receita_liquida != null)) {
-        valor += operacional.reduce((s, r) => s + Number(r.receita_liquida), 0);
-        presentes++;
-        fontes.add('Receita líquida operacional');
-      }
-    }
-    return [mes, { valor: presentes === unitIds.length && presentes > 0 ? Math.round(valor * 100) / 100 : null,
-      criterio: presentes < unitIds.length ? 'Receita não disponível para todas as unidades no período' : [...fontes].join(' · ') }];
-  }));
+// Recebe apenas documentos de saída não cancelados, nunca itens da nota.
+export function faturamentoPorMes(unitIds: string[], janela: string[], notas: NotaFaturamento[]): Record<string, FaturamentoMes> {
+  const unidades = new Set(unitIds);
+  const totais = new Map<string, number>();
+  for (const nota of notas) {
+    if (!unidades.has(nota.unit_id) || nota.valor_total == null) continue;
+    const parts = calendario.formatToParts(new Date(nota.emissao));
+    const mes = `${parts.find(p => p.type === 'year')!.value}-${parts.find(p => p.type === 'month')!.value}-01`;
+    totais.set(mes, (totais.get(mes) ?? 0) + Math.round(Number(nota.valor_total) * 100));
+  }
+  return Object.fromEntries(janela.map(mes => [mes, {
+    valor: totais.has(mes) ? totais.get(mes)! / 100 : null,
+    criterio: 'Total das NF-e/NFC-e de saída · exclui canceladas',
+  }]));
 }
