@@ -6,6 +6,7 @@ import JSZip from "jszip"
 import { importNfe, finalizarImportacaoNfe, type NfeImportResult } from "@/app/financeiro/dre/cmv/actions"
 import { parseNfeXml, type NfeDirection, type ParsedNfe } from "@/lib/nfe/parser"
 
+import { sendNfeBatches } from "@/lib/nfe/send-batches"
 import { splitNfeBatches } from "@/lib/nfe/batches"
 
 type Props = { direction: NfeDirection; onClose: () => void; onSuccess: () => void }
@@ -79,17 +80,10 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
     const cnpjMap = new Map<string, { nome: string | null; notas: number; valor: number }>()
     const affectedUnitIds = new Set<string>()
     const batches = splitNfeBatches(notes, direction)
-    setProgress({ current: 0, total: batches.length })
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i]!
-      const response = await importNfe({
-        arquivo: fileName,
-        adiarRecalculo: true,
-        direcao: direction,
-        notas: batch,
-        rejeitadas: i === 0 ? rejected : 0,
-      })
-      if (!response.ok) { setError(response.error ?? "Falha na importação."); setStatus("error"); return }
+    setProgress({ current: 0, total: notes.length })
+    for await (const { response, processed } of sendNfeBatches(batches, {
+      arquivo: fileName, direcao: direction, rejeitadas: rejected,
+    }, importNfe)) {
       aggregate.importadas += response.importadas
       aggregate.duplicadas += response.duplicadas
       aggregate.canceladas += response.canceladas
@@ -106,7 +100,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
         if (!acc.nome && item.nome) acc.nome = item.nome
         cnpjMap.set(item.cnpj, acc)
       }
-      setProgress({ current: i + 1, total: batches.length })
+      setProgress({ current: processed, total: notes.length })
     }
     aggregate.cnpjsDesconhecidos = [...cnpjMap.entries()].map(([cnpj, v]) => ({ cnpj, ...v }))
     setResult(aggregate)
@@ -153,7 +147,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
       </>}
 
       {error && <div style={{ padding:"9px 12px", marginTop:12, borderRadius:7, background:"rgba(239,68,68,.1)", color:"#ef4444", fontSize:12 }}>{error}</div>}
-      {status === "uploading" && <p style={{ padding:28, textAlign:"center", color:"var(--text-3)" }}>Salvando notas em lotes… {progress.current}/{progress.total}</p>}
+      {status === "uploading" && <p style={{ padding:28, textAlign:"center", color:"var(--text-3)" }}>Processando notas… {progress.current}/{progress.total}</p>}
       {status === "finalizing" && <p style={{ padding:28, textAlign:"center", color:"var(--text-3)" }}>Notas salvas. Atualizando indicadores…</p>}
       {status === "done" && result && <div style={{ padding:"12px 0" }}>
         <h3 style={{ color:"#22c55e", margin:"0 0 8px" }}>Importação concluída</h3>

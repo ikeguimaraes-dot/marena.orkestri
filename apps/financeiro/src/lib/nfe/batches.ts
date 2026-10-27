@@ -3,7 +3,7 @@ import type { NfeDirection, ParsedNfe } from "./parser"
 // Saídas costumam ter poucos itens. Limitar também o trabalho e os bytes
 // impede que notas grandes tornem os lotes maiores demais.
 const MAX_BATCH_BYTES = 2_500_000
-const MAX_BATCH_ITEMS = 1_000
+const MAX_BATCH_ITEMS = 300
 
 export function splitNfeBatches(notes: ParsedNfe[], direction: NfeDirection) {
   const maxNotes = direction === "saida" ? 100 : 20
