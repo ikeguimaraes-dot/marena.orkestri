@@ -18,6 +18,6 @@ export function loadTs(path, overrides = {}, cache = new Map()) {
     return loadTs(target, overrides, cache);
   };
   const { outputText } = ts.transpileModule(readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
-  vm.runInNewContext(outputText, { exports, require, console, process, crypto: globalThis.crypto, Date, Intl, Buffer, setTimeout, clearTimeout }, { filename: file });
+  vm.runInNewContext(outputText, { exports, require, console, process, crypto: globalThis.crypto, Date, Intl, Buffer, TextEncoder, setTimeout, clearTimeout }, { filename: file });
   return exports;
 }

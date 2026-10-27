@@ -293,7 +293,8 @@ export async function importNfe(payload: NfeImportPayload): Promise<NfeImportRes
     // importação — os itens já foram gravados; o botão "Reprocessar
     // catálogo completo" na aba Catálogo cobre qualquer lacuna.
     const chavesDoLote = [...new Set(notasParaProdutos.map(note => note.chave))]
-    const catalogo = chavesDoLote.length ? await gerarCatalogoAutomatico(chavesDoLote) : null
+    // O catálogo usa somente compras; saídas não precisam ler todo o de/para.
+    const catalogo = payload.direcao === "entrada" && chavesDoLote.length ? await gerarCatalogoAutomatico(chavesDoLote) : null
     if (!payload.adiarRecalculo) await finalizarImportacaoNfe(targetUnitIds);
 
     return {

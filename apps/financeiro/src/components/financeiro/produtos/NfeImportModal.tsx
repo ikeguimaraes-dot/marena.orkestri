@@ -6,35 +6,14 @@ import JSZip from "jszip"
 import { importNfe, finalizarImportacaoNfe, type NfeImportResult } from "@/app/financeiro/dre/cmv/actions"
 import { parseNfeXml, type NfeDirection, type ParsedNfe } from "@/lib/nfe/parser"
 
+import { splitNfeBatches } from "@/lib/nfe/batches"
+
 type Props = { direction: NfeDirection; onClose: () => void; onSuccess: () => void }
 type Status = "idle" | "reading" | "ready" | "uploading" | "done" | "error"
-
-const MAX_NOTES_PER_BATCH = 20
-const MAX_BATCH_BYTES = 2_500_000
 
 function sourceLabel(files: File[]) {
   if (files.length === 1) return files[0]!.name
   return `${files.length} arquivos selecionados`
-}
-
-export function splitNfeBatches(notes: ParsedNfe[]) {
-  const batches: ParsedNfe[][] = []
-  let batch: ParsedNfe[] = []
-  let batchBytes = 0
-  for (const note of notes) {
-    // O XML original é enviado junto com os campos parseados. Medir o JSON
-    // evita estourar o limite da Server Action com XMLs excepcionalmente grandes.
-    const bytes = new TextEncoder().encode(JSON.stringify(note)).byteLength
-    if (batch.length && (batch.length >= MAX_NOTES_PER_BATCH || batchBytes + bytes > MAX_BATCH_BYTES)) {
-      batches.push(batch)
-      batch = []
-      batchBytes = 0
-    }
-    batch.push(note)
-    batchBytes += bytes
-  }
-  if (batch.length) batches.push(batch)
-  return batches
 }
 
 export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }: Props) {
@@ -85,7 +64,7 @@ export function NfeImportModal({ direction: fixedDirection, onClose, onSuccess }
     const aggregate: NfeImportResult = { ok: true, importadas: 0, duplicadas: 0, canceladas: 0, itens: 0, naoImportadas: 0, direcaoIncorreta: 0, unitIds: [], cnpjsDesconhecidos: [], produtosCriados: 0, vinculosCriados: 0 }
     const cnpjMap = new Map<string, { nome: string | null; notas: number; valor: number }>()
     const affectedUnitIds = new Set<string>()
-    const batches = splitNfeBatches(notes)
+    const batches = splitNfeBatches(notes, direction)
     setProgress({ current: 0, total: batches.length })
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i]!
